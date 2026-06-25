@@ -6,7 +6,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -94,9 +93,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name="configparameter",
-            index=models.Index(
-                fields=["key", "effective_from"], name="fees_config_key_b97f68_idx"
-            ),
+            index=models.Index(fields=["key", "effective_from"], name="fees_config_key_b97f68_idx"),
         ),
         migrations.AddIndex(
             model_name="payment",

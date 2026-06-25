@@ -7,7 +7,13 @@ from django.core.management import call_command
 from django.db import connection
 from django.utils import timezone
 
-from apps.applications.models import Application, Milestone, MilestoneInstance, Stream, StreamMilestone
+from apps.applications.models import (
+    Application,
+    Milestone,
+    MilestoneInstance,
+    Stream,
+    StreamMilestone,
+)
 from apps.compliance.models import AuditEvent
 from apps.compliance.services import record_audit_event
 
@@ -15,6 +21,7 @@ User = get_user_model()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_user(username="officer1"):
     return User.objects.create_user(username=username, password="testpass123")
@@ -29,6 +36,7 @@ def _make_milestone(code="S1-RDO"):
 
 
 # ── AuditEvent: Layer 1 (model-level guard) ───────────────────────────────────
+
 
 @pytest.mark.django_db
 def test_audit_event_insert_succeeds():
@@ -68,11 +76,13 @@ def test_audit_event_queryset_update_bypasses_model_save_but_not_trigger():
     event = record_audit_event(verb="qs.update.test", target_type="Application", target_id=1)
 
     from django.db import ProgrammingError
+
     with pytest.raises(ProgrammingError):
         AuditEvent.objects.filter(pk=event.pk).update(verb="tampered_via_qs")
 
 
 # ── AuditEvent: Layer 2 (DB trigger) ─────────────────────────────────────────
+
 
 @pytest.mark.django_db(transaction=True)
 def test_audit_event_db_trigger_blocks_raw_update():
@@ -121,6 +131,7 @@ def test_audit_event_db_trigger_blocks_raw_delete():
 
 # ── OC / S7: never auto-cleared ───────────────────────────────────────────────
 
+
 @pytest.mark.django_db
 def test_oc_milestone_never_auto_deemed():
     """
@@ -160,8 +171,7 @@ def test_oc_milestone_never_auto_deemed():
 
     instance.refresh_from_db()
     assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS, (
-        "OC milestone was incorrectly auto-deemed by SLA sweep "
-        f"(status became {instance.status!r})"
+        f"OC milestone was incorrectly auto-deemed by SLA sweep (status became {instance.status!r})"
     )
     assert not instance.is_deemed, "OC milestone was marked is_deemed=True by SLA sweep"
     assert instance.completed_at is None, "OC milestone got a completed_at timestamp from SLA sweep"

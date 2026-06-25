@@ -9,6 +9,7 @@ class Certificate(models.Model):
     Issued certificates. Rows are NEVER deleted (statutory permanence).
     Revocation is recorded via revoked_at; the row and R2 object are retained.
     """
+
     TYPE_BUILDING_PERMISSION = "building_permission"
     TYPE_COMMENCEMENT = "commencement"
     TYPE_PLINTH = "plinth"
@@ -20,7 +21,9 @@ class Certificate(models.Model):
         (TYPE_OC, "Occupancy Certificate"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.PROTECT, related_name="certificates")
+    application = models.ForeignKey(
+        Application, on_delete=models.PROTECT, related_name="certificates"
+    )
     certificate_type = models.CharField(max_length=25, choices=TYPE_CHOICES)
     certificate_number = models.CharField(max_length=30, unique=True)
 
@@ -38,7 +41,10 @@ class Certificate(models.Model):
 
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="revoked_certificates",
     )
     revocation_reason = models.TextField(blank=True)

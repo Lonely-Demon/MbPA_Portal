@@ -6,10 +6,14 @@ from apps.applications.models import Application, MilestoneInstance, Stream, Str
 
 class DocumentSlot(models.Model):
     """Definition of a required or optional document for a stream/milestone combination."""
+
     stream = models.ForeignKey(Stream, on_delete=models.CASCADE, related_name="document_slots")
     stream_milestone = models.ForeignKey(
-        StreamMilestone, on_delete=models.CASCADE, related_name="document_slots",
-        null=True, blank=True,  # null = required at submission regardless of milestone
+        StreamMilestone,
+        on_delete=models.CASCADE,
+        related_name="document_slots",
+        null=True,
+        blank=True,  # null = required at submission regardless of milestone
     )
     code = models.CharField(max_length=50)
     name = models.CharField(max_length=200)
@@ -29,6 +33,7 @@ class DocumentSlot(models.Model):
 
 class DocumentUpload(models.Model):
     """A single uploaded file attached to an application slot."""
+
     STATUS_PENDING = "pending"
     STATUS_ACCEPTED = "accepted"
     STATUS_REJECTED = "rejected"
@@ -38,10 +43,15 @@ class DocumentUpload(models.Model):
         (STATUS_REJECTED, "Rejected"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="document_uploads")
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="document_uploads"
+    )
     slot = models.ForeignKey(DocumentSlot, on_delete=models.PROTECT, related_name="uploads")
     milestone_instance = models.ForeignKey(
-        MilestoneInstance, on_delete=models.SET_NULL, null=True, blank=True,
+        MilestoneInstance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="document_uploads",
     )
     uploaded_by = models.ForeignKey(

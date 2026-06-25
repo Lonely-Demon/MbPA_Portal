@@ -7,6 +7,7 @@ from apps.applications.models import Application, MilestoneInstance
 
 class ConditionalClearance(models.Model):
     """Conditions attached to a clearance grant that must be fulfilled."""
+
     TYPE_NOC = "noc"
     TYPE_STRUCTURAL = "structural"
     TYPE_FIRE = "fire"
@@ -22,10 +23,15 @@ class ConditionalClearance(models.Model):
         (TYPE_OTHER, "Other"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="conditional_clearances")
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="conditional_clearances"
+    )
     milestone_instance = models.ForeignKey(
-        MilestoneInstance, on_delete=models.PROTECT, related_name="conditional_clearances",
-        null=True, blank=True,
+        MilestoneInstance,
+        on_delete=models.PROTECT,
+        related_name="conditional_clearances",
+        null=True,
+        blank=True,
     )
     clearance_type = models.CharField(max_length=15, choices=TYPE_CHOICES)
     description = models.TextField()
@@ -34,7 +40,10 @@ class ConditionalClearance(models.Model):
     is_fulfilled = models.BooleanField(default=False)
     fulfilled_at = models.DateTimeField(null=True, blank=True)
     fulfilled_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="fulfilled_clearances",
     )
     created_at = models.DateTimeField(auto_now_add=True)
@@ -61,10 +70,15 @@ class Complaint(models.Model):
         (STATUS_CLOSED, "Closed"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="complaints")
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="complaints"
+    )
     origin = models.CharField(max_length=20, choices=ORIGIN_CHOICES)
     raised_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="raised_complaints",
     )
     subject = models.CharField(max_length=255)
@@ -87,19 +101,24 @@ class AuditEvent(models.Model):
     Enforcement is layered:
       1. Model-level: save() raises on pk-present calls; delete() always raises.
       2. DB-level: a BEFORE UPDATE OR DELETE trigger raises an exception (added in migration).
-      3. DB-level: the application DB user has INSERT-only on this table (documented in deployment runbook).
+      3. DB-level: the application DB user has INSERT-only on this table
+         (documented in deployment runbook).
 
     target_type / target_id use plain fields (not GenericForeignKey) to avoid
     content-type table coupling and to allow queries without joins.
     """
+
     actor = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="audit_events",
     )
-    verb = models.CharField(max_length=100)           # e.g. "application.submitted"
-    target_type = models.CharField(max_length=100)    # e.g. "Application"
+    verb = models.CharField(max_length=100)  # e.g. "application.submitted"
+    target_type = models.CharField(max_length=100)  # e.g. "Application"
     target_id = models.BigIntegerField()
-    payload = models.JSONField(default=dict)          # diff / before-after snapshot
+    payload = models.JSONField(default=dict)  # diff / before-after snapshot
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
     # Monotonic sequence maintained by DB BIGSERIAL — see migration
@@ -124,6 +143,7 @@ class AuditEvent(models.Model):
 
 class Holiday(models.Model):
     """Public / bank holiday calendar used by SLA working-day calculations."""
+
     date = models.DateField(unique=True)
     description = models.CharField(max_length=200)
     is_national = models.BooleanField(default=True)
@@ -133,4 +153,4 @@ class Holiday(models.Model):
         ordering = ["date"]
 
     def __str__(self):
-        return f"{self.date} – {self.description}"
+        return f"{self.date} - {self.description}"

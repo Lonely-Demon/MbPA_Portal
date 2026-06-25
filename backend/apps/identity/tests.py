@@ -12,6 +12,7 @@ PEPPER_B = "pepper-bbbb-test-value-64-chars-long-placeholder-xxxxxxxxxxxxxxxxx"
 
 # ── _normalize_aadhaar ────────────────────────────────────────────────────────
 
+
 def test_normalize_strips_spaces():
     assert _normalize_aadhaar(VALID_AADHAAR_SPACED) == VALID_AADHAAR
 
@@ -45,6 +46,7 @@ def test_normalize_rejects_empty():
 
 
 # ── hash_aadhaar ──────────────────────────────────────────────────────────────
+
 
 @override_settings(AADHAAR_PEPPER=PEPPER_A)
 def test_hash_aadhaar_returns_64_char_hex():
@@ -95,6 +97,7 @@ def test_hash_aadhaar_raises_when_pepper_is_none():
 
 
 # ── aadhaar_matches ───────────────────────────────────────────────────────────
+
 
 @override_settings(AADHAAR_PEPPER=PEPPER_A)
 def test_aadhaar_matches_true_for_same_input():

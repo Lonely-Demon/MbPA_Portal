@@ -13,5 +13,9 @@ urlpatterns = [
     path("api/compliance/", include("apps.compliance.urls")),
     # OpenAPI schema (dev/staging only; SERVE_INCLUDE_SCHEMA=False in prod)
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
-    path("api/schema/swagger/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
+    path(
+        "api/schema/swagger/",
+        SpectacularSwaggerView.as_view(url_name="schema"),
+        name="swagger-ui",
+    ),
 ]

@@ -122,7 +122,9 @@ REST_FRAMEWORK = {
 # ── drf-spectacular ───────────────────────────────────────────────────────────
 SPECTACULAR_SETTINGS = {
     "TITLE": "MbPA Building Permission Portal API",
-    "DESCRIPTION": "Mumbai Port Authority Special Planning Authority — UPDR-2026 building permission workflow.",
+    "DESCRIPTION": (
+        "Mumbai Port Authority Special Planning Authority — UPDR-2026 building permission workflow."
+    ),
     "VERSION": "0.1.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,

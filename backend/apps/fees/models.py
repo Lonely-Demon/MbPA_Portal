@@ -11,6 +11,7 @@ class ConfigParameter(models.Model):
     with a new effective_from date. The row with the latest effective_from ≤ now
     is the active value.
     """
+
     key = models.CharField(max_length=100)
     value = models.CharField(max_length=500)
     effective_from = models.DateField()
@@ -31,6 +32,7 @@ class ConfigParameter(models.Model):
 
 class Concession(models.Model):
     """Premium / concession detected on an application parcel."""
+
     TYPE_FSI = "fsi"
     TYPE_OPEN_SPACE = "open_space"
     TYPE_PARKING = "parking"
@@ -40,7 +42,9 @@ class Concession(models.Model):
         (TYPE_PARKING, "Parking"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="concessions")
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="concessions"
+    )
     concession_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
     detected_value = models.DecimalField(max_digits=12, decimal_places=4)
     benchmark_value = models.DecimalField(max_digits=12, decimal_places=4)
@@ -59,13 +63,19 @@ class FeeAssessment(models.Model):
       scrutiny  = 50 * proposed_bua
       security  = 10 * proposed_bua
       debris    = 20 * proposed_bua
-      premiums  = concession totals (FSI×1.10, OpenSpace×0.25, Parking×0.40 on Δarea × Zonal_RRR)
+      premiums  = concession totals (FSI*1.10, OpenSpace*0.25, Parking*0.40, delta_area*Zonal_RRR)
       total     = scrutiny + security + debris + premiums
     """
-    application = models.OneToOneField(Application, on_delete=models.CASCADE, related_name="fee_assessment")
+
+    application = models.OneToOneField(
+        Application, on_delete=models.CASCADE, related_name="fee_assessment"
+    )
     config_version = models.ForeignKey(
-        ConfigParameter, on_delete=models.PROTECT, related_name="assessments",
-        null=True, blank=True,
+        ConfigParameter,
+        on_delete=models.PROTECT,
+        related_name="assessments",
+        null=True,
+        blank=True,
     )
 
     scrutiny_fee = models.DecimalField(max_digits=14, decimal_places=2)
@@ -100,7 +110,7 @@ class Payment(models.Model):
 
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="payments")
     assessment = models.ForeignKey(FeeAssessment, on_delete=models.PROTECT, related_name="payments")
-    challan_reference = models.CharField(max_length=100, db_index=True)  # not unique: re-submissions allowed
+    challan_reference = models.CharField(max_length=100, db_index=True)  # re-submissions allowed
     claimed_amount = models.DecimalField(max_digits=14, decimal_places=2)
     verified_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_CLAIMED)
@@ -109,7 +119,10 @@ class Payment(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="recorded_payments"
     )
     verified_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="verified_payments",
     )
     remarks = models.TextField(blank=True)

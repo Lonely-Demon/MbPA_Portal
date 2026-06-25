@@ -13,7 +13,10 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "*/migrations/*" = ["E501", "N806", "RUF012"]
+"*/models.py" = ["RUF012"]
+"*/views.py" = ["RUF012"]
 "*/tests/*" = ["S", "B"]
+"*/tests.py" = ["S", "B"]
 "*/management/commands/*" = ["S"]
 
 [tool.mypy]

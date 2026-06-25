@@ -1,7 +1,3 @@
-import hashlib
-import hmac
-
-from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -16,7 +12,9 @@ class User(AbstractUser):
         (USER_TYPE_ADMIN, "Admin"),
     ]
 
-    user_type = models.CharField(max_length=10, choices=USER_TYPE_CHOICES, default=USER_TYPE_APPLICANT)
+    user_type = models.CharField(
+        max_length=10, choices=USER_TYPE_CHOICES, default=USER_TYPE_APPLICANT
+    )
     mobile = models.CharField(max_length=15, blank=True)
     is_mobile_verified = models.BooleanField(default=False)
 
@@ -76,6 +74,7 @@ class OfficerProfile(models.Model):
 
 class OtpToken(models.Model):
     """Short-lived OTP; rows are hard-deleted after verification or expiry."""
+
     PURPOSE_LOGIN = "login"
     PURPOSE_MOBILE_VERIFY = "mobile_verify"
     PURPOSE_CHOICES = [

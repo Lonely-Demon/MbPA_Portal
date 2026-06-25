@@ -22,7 +22,6 @@ that bypasses the role restriction, which is acceptable because the trigger
 
 from django.db import migrations
 
-
 CREATE_IMMUTABILITY_TRIGGER = """
 CREATE OR REPLACE FUNCTION compliance_audit_event_immutable()
 RETURNS trigger

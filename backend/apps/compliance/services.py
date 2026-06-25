@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 from .models import AuditEvent
 

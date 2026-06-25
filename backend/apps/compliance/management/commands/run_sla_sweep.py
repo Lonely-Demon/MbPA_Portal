@@ -15,6 +15,7 @@ S7/OC is NEVER auto-cleared — two independent guards enforce this:
     even if the flag is wrong in the database (data corruption, missed migration,
     admin edit). This is the AC-18 redundancy from the build plan.
 """
+
 import logging
 
 from django.core.management.base import BaseCommand
@@ -85,7 +86,9 @@ class Command(BaseCommand):
                 cleared += 1
             except Exception as exc:
                 logger.error(
-                    "SLA sweep failed for MilestoneInstance %s: %s", instance.pk, exc,
+                    "SLA sweep failed for MilestoneInstance %s: %s",
+                    instance.pk,
+                    exc,
                     exc_info=True,
                 )
 
@@ -97,5 +100,6 @@ class Command(BaseCommand):
         )
         logger.info(
             "SLA sweep complete: %d deemed-cleared, %d protected skipped.",
-            cleared, skipped_protected,
+            cleared,
+            skipped_protected,
         )
