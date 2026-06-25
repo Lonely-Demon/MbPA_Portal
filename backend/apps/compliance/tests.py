@@ -1,3 +1,4 @@
+import datetime
 from datetime import timedelta
 
 import pytest
@@ -14,8 +15,8 @@ from apps.applications.models import (
     Stream,
     StreamMilestone,
 )
-from apps.compliance.models import AuditEvent
-from apps.compliance.services import record_audit_event
+from apps.compliance.models import AuditEvent, Holiday
+from apps.compliance.services import compute_due_at, record_audit_event
 
 User = get_user_model()
 
@@ -264,3 +265,110 @@ def test_oc_milestone_never_auto_deemed_even_if_flag_is_wrong():
     )
     assert not instance.is_deemed
     assert instance.completed_at is None
+
+
+# ── compute_due_at ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_compute_due_at_skips_weekends():
+    # Monday 2026-01-05 + 5 working days = Monday 2026-01-12
+    # (Tue 6, Wed 7, Thu 8, Fri 9, Mon 12 — skips Sat 10, Sun 11)
+    started_at = datetime.datetime(2026, 1, 5, 9, 0, 0, tzinfo=datetime.UTC)
+    result = compute_due_at(started_at, 5)
+    assert result.date() == datetime.date(2026, 1, 12)
+    assert result.hour == 9  # preserves time component
+
+
+@pytest.mark.django_db
+def test_compute_due_at_skips_holidays():
+    # Monday 2026-01-05 + 3 working days, with Tuesday-Thursday in Holiday table
+    started_at = datetime.datetime(2026, 1, 5, 10, 0, 0, tzinfo=datetime.UTC)
+    Holiday.objects.create(date=datetime.date(2026, 1, 6), description="Holiday Tue")
+    Holiday.objects.create(date=datetime.date(2026, 1, 7), description="Holiday Wed")
+    Holiday.objects.create(date=datetime.date(2026, 1, 8), description="Holiday Thu")
+    # Working days: Fri 9 (1), Mon 12 (2), Tue 13 (3)
+    result = compute_due_at(started_at, 3)
+    assert result.date() == datetime.date(2026, 1, 13)
+
+
+@pytest.mark.django_db
+def test_compute_due_at_skips_both_weekends_and_holidays():
+    # Mon 2026-01-05 + 1 working day, with Tue in Holiday table → due Wed 7
+    started_at = datetime.datetime(2026, 1, 5, 8, 0, 0, tzinfo=datetime.UTC)
+    Holiday.objects.create(date=datetime.date(2026, 1, 6), description="Holiday Tue")
+    result = compute_due_at(started_at, 1)
+    assert result.date() == datetime.date(2026, 1, 7)
+
+
+@pytest.mark.django_db
+def test_compute_due_at_preserves_tzinfo():
+    from django.utils import timezone as dj_timezone
+
+    started_at = dj_timezone.now()
+    result = compute_due_at(started_at, 1)
+    assert result.tzinfo is not None
+    assert result > started_at
+
+
+# ── seed_reference_data ───────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_seed_reference_data_is_idempotent():
+    from apps.applications.models import Milestone, Stream, StreamMilestone
+
+    call_command("seed_reference_data", verbosity=0)
+    stream_count_1 = Stream.objects.count()
+    milestone_count_1 = Milestone.objects.count()
+    sm_count_1 = StreamMilestone.objects.count()
+
+    # Re-running must not create duplicates
+    call_command("seed_reference_data", verbosity=0)
+    assert Stream.objects.count() == stream_count_1
+    assert Milestone.objects.count() == milestone_count_1
+    assert StreamMilestone.objects.count() == sm_count_1
+
+
+@pytest.mark.django_db
+def test_seed_reference_data_oc_milestone_never_auto_deemed():
+    """
+    AC-18 guard #1: every StreamMilestone row linking to the OC milestone
+    must have deemed_clearance_eligible=False after seeding.
+    """
+    from apps.applications.models import StreamMilestone
+
+    call_command("seed_reference_data", verbosity=0)
+    oc_rows = StreamMilestone.objects.filter(milestone__code="OC")
+    assert oc_rows.exists(), "OC milestone not linked to any stream after seed"
+    bad = oc_rows.filter(deemed_clearance_eligible=True)
+    assert not bad.exists(), (
+        f"AC-18 violated: {bad.count()} OC StreamMilestone row(s) "
+        f"have deemed_clearance_eligible=True after seed"
+    )
+
+
+@pytest.mark.django_db
+def test_seed_reference_data_seeds_all_streams():
+    from apps.applications.models import Stream
+
+    call_command("seed_reference_data", verbosity=0)
+    expected = {
+        "new_building",
+        "addition",
+        "layout",
+        "reerection",
+        "temporary",
+        "special",
+        "regularise",
+    }
+    actual = set(Stream.objects.values_list("code", flat=True))
+    assert expected <= actual
+
+
+@pytest.mark.django_db
+def test_seed_reference_data_seeds_2nd_4th_saturdays():
+    call_command("seed_reference_data", verbosity=0)
+    # There should be 24 2nd/4th Saturday rows for 2026 (2 per month x 12 months)
+    sat_count = Holiday.objects.filter(description__contains="Saturday").count()
+    assert sat_count == 24, f"Expected 24 2nd/4th Saturday rows, got {sat_count}"

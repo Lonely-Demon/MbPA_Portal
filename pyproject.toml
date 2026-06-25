@@ -18,7 +18,7 @@ ignore = [
 "*/serializers.py" = ["RUF012"]
 "*/tests/*" = ["S", "B"]
 "*/tests.py" = ["S", "B"]
-"*/management/commands/*" = ["S"]
+"*/management/commands/*" = ["S", "N806"]
 
 [tool.mypy]
 python_version = "3.12"
