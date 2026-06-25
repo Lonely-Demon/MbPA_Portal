@@ -1,7 +1,32 @@
 import pytest
+from django.contrib.auth import get_user_model
 from django.test import override_settings
+from django.utils import timezone
+from rest_framework.test import APIClient
 
-from apps.identity.services import _normalize_aadhaar, aadhaar_matches, hash_aadhaar
+from apps.common.exceptions import (
+    AadhaarAlreadyRegisteredError,
+    OtpAttemptsExceededError,
+    OtpExpiredError,
+)
+from apps.identity.models import ApplicantProfile, OfficerProfile, OtpToken
+from apps.identity.selectors import check_aadhaar_dedup, get_user_for_login
+from apps.identity.serializers import (
+    LoginRequestSerializer,
+    MeSerializer,
+    OtpVerifySerializer,
+    SignupSerializer,
+)
+from apps.identity.services import (
+    _normalize_aadhaar,
+    aadhaar_matches,
+    hash_aadhaar,
+    login_issue_session,
+    register_applicant,
+    verify_otp,
+)
+
+User = get_user_model()
 
 VALID_AADHAAR = "123456789012"
 VALID_AADHAAR_SPACED = "1234 5678 9012"
@@ -123,3 +148,390 @@ def test_aadhaar_matches_false_for_tampered_hash():
     stored = hash_aadhaar(VALID_AADHAAR)
     tampered = stored[:-1] + ("0" if stored[-1] != "0" else "1")
     assert aadhaar_matches(VALID_AADHAAR, tampered) is False
+
+
+# ── OTP services — brute-force cap (AC-06) ────────────────────────────────────
+
+
+@pytest.mark.django_db
+@override_settings(
+    AADHAAR_PEPPER=PEPPER_A,
+    OTP_TTL_SECONDS=600,
+    OTP_MAX_ATTEMPTS=5,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+def test_otp_correct_code_succeeds():
+    token = OtpToken.objects.create(
+        email="a@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=__import__("hashlib").sha256(b"123456").hexdigest(),
+        expires_at=timezone.now() + __import__("datetime").timedelta(minutes=10),
+    )
+    result = verify_otp(token_id=token.pk, submitted_code="123456")
+    assert result.consumed_at is not None
+
+
+@pytest.mark.django_db
+@override_settings(OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5)
+def test_otp_wrong_code_increments_attempt_count():
+    import datetime
+    import hashlib
+
+    token = OtpToken.objects.create(
+        email="b@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=hashlib.sha256(b"999999").hexdigest(),
+        expires_at=timezone.now() + datetime.timedelta(minutes=10),
+    )
+    with pytest.raises(Exception):
+        verify_otp(token_id=token.pk, submitted_code="000000")
+    token.refresh_from_db()
+    assert token.attempt_count == 1
+
+
+@pytest.mark.django_db
+@override_settings(OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=3)
+def test_otp_attempt_cap_raises_exceeded_error():
+    import datetime
+    import hashlib
+
+    token = OtpToken.objects.create(
+        email="c@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=hashlib.sha256(b"999999").hexdigest(),
+        expires_at=timezone.now() + datetime.timedelta(minutes=10),
+    )
+    for _ in range(2):
+        with pytest.raises(Exception):
+            verify_otp(token_id=token.pk, submitted_code="000000")
+
+    with pytest.raises(OtpAttemptsExceededError):
+        verify_otp(token_id=token.pk, submitted_code="000000")
+
+
+@pytest.mark.django_db
+@override_settings(OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5)
+def test_otp_expired_token_raises():
+    import datetime
+    import hashlib
+
+    token = OtpToken.objects.create(
+        email="d@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=hashlib.sha256(b"123456").hexdigest(),
+        expires_at=timezone.now() - datetime.timedelta(minutes=1),
+    )
+    with pytest.raises(OtpExpiredError):
+        verify_otp(token_id=token.pk, submitted_code="123456")
+
+
+@pytest.mark.django_db
+@override_settings(OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5)
+def test_otp_consumed_token_raises():
+    import datetime
+    import hashlib
+
+    token = OtpToken.objects.create(
+        email="e@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=hashlib.sha256(b"123456").hexdigest(),
+        expires_at=timezone.now() + datetime.timedelta(minutes=10),
+        consumed_at=timezone.now(),
+    )
+    with pytest.raises(OtpExpiredError):
+        verify_otp(token_id=token.pk, submitted_code="123456")
+
+
+@pytest.mark.django_db
+@override_settings(OTP_MAX_ATTEMPTS=5, OTP_TTL_SECONDS=600)
+def test_otp_attempt_count_persists_after_wrong_code():
+    """Attempt increments must survive even when an exception is raised (AC-06)."""
+    import datetime
+    import hashlib
+
+    token = OtpToken.objects.create(
+        email="f@test.com",
+        purpose=OtpToken.PURPOSE_LOGIN,
+        code_hash=hashlib.sha256(b"999999").hexdigest(),
+        expires_at=timezone.now() + datetime.timedelta(minutes=10),
+    )
+    with pytest.raises(Exception):
+        verify_otp(token_id=token.pk, submitted_code="111111")
+
+    token.refresh_from_db()
+    assert token.attempt_count == 1  # Increment persisted despite exception
+
+
+# ── Aadhaar deduplication ─────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+@override_settings(AADHAAR_PEPPER=PEPPER_A)
+def test_check_aadhaar_dedup_false_when_no_profile():
+    h = hash_aadhaar(VALID_AADHAAR)
+    assert check_aadhaar_dedup(h) is False
+
+
+@pytest.mark.django_db
+@override_settings(AADHAAR_PEPPER=PEPPER_A)
+def test_check_aadhaar_dedup_true_after_registration():
+    user = User.objects.create_user(username="deduptest", email="dd@test.com", password="pw")
+    h = hash_aadhaar(VALID_AADHAAR)
+    ApplicantProfile.objects.create(
+        user=user, full_name="Test", aadhaar_hash=h, aadhaar_last4="9012"
+    )
+    assert check_aadhaar_dedup(h) is True
+
+
+@pytest.mark.django_db
+@override_settings(
+    AADHAAR_PEPPER=PEPPER_A,
+    OTP_TTL_SECONDS=600,
+    OTP_MAX_ATTEMPTS=5,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+def test_register_applicant_duplicate_aadhaar_raises():
+    # Register first user
+    User.objects.create_user(username="first", email="first@test.com", password="pw")
+    h = hash_aadhaar(VALID_AADHAAR)
+    ApplicantProfile.objects.create(
+        user=User.objects.get(username="first"),
+        full_name="First",
+        aadhaar_hash=h,
+        aadhaar_last4="9012",
+    )
+
+    with pytest.raises(AadhaarAlreadyRegisteredError):
+        register_applicant(
+            email="second@test.com",
+            username="second",
+            password="securepass123",
+            full_name="Second",
+            aadhaar_raw=VALID_AADHAAR,
+        )
+
+
+@pytest.mark.django_db
+@override_settings(
+    AADHAAR_PEPPER=PEPPER_A,
+    OTP_TTL_SECONDS=600,
+    OTP_MAX_ATTEMPTS=5,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+def test_register_applicant_success_creates_profile():
+    user, token = register_applicant(
+        email="new@test.com",
+        username="newuser",
+        password="securepass123",
+        full_name="New User",
+        aadhaar_raw=VALID_AADHAAR,
+    )
+    assert user.pk is not None
+    assert user.user_type == User.USER_TYPE_APPLICANT
+    assert ApplicantProfile.objects.filter(user=user).exists()
+    profile = ApplicantProfile.objects.get(user=user)
+    assert profile.aadhaar_last4 == "9012"
+    assert token.purpose == OtpToken.PURPOSE_SIGNUP
+
+
+# ── Session TTL (AC-10) ───────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+@override_settings(
+    APPLICANT_SESSION_TTL_SECONDS=2700,
+    OFFICER_SESSION_TTL_SECONDS=21600,
+    AXES_ENABLED=False,
+)
+def test_login_issue_session_applicant_ttl():
+    from unittest.mock import MagicMock, patch
+
+    user = User.objects.create_user(
+        username="applicant_ttl",
+        email="ap@test.com",
+        password="pw",
+        user_type=User.USER_TYPE_APPLICANT,
+    )
+    request = MagicMock()
+    request.session = MagicMock()
+    with patch("apps.identity.services.login"):
+        login_issue_session(request, user)
+    request.session.set_expiry.assert_called_once_with(2700)
+
+
+@pytest.mark.django_db
+@override_settings(
+    APPLICANT_SESSION_TTL_SECONDS=2700,
+    OFFICER_SESSION_TTL_SECONDS=21600,
+    AXES_ENABLED=False,
+)
+def test_login_issue_session_officer_ttl():
+    from unittest.mock import MagicMock, patch
+
+    user = User.objects.create_user(
+        username="officer_ttl",
+        email="of@test.com",
+        password="pw",
+        user_type=User.USER_TYPE_OFFICER,
+    )
+    OfficerProfile.objects.create(user=user, role=OfficerProfile.ROLE_JUNIOR_PLANNER)
+    request = MagicMock()
+    request.session = MagicMock()
+    with patch("apps.identity.services.login"):
+        login_issue_session(request, user)
+    request.session.set_expiry.assert_called_once_with(21600)
+
+
+# ── Selector: get_user_for_login ──────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_get_user_for_login_returns_user_when_both_match():
+    User.objects.create_user(username="ulogin", email="ulogin@test.com", password="pw")
+    result = get_user_for_login(email="ulogin@test.com", username="ulogin")
+    assert result is not None
+    assert result.username == "ulogin"
+
+
+@pytest.mark.django_db
+def test_get_user_for_login_returns_none_when_email_wrong():
+    User.objects.create_user(username="ulogin2", email="right@test.com", password="pw")
+    result = get_user_for_login(email="wrong@test.com", username="ulogin2")
+    assert result is None
+
+
+@pytest.mark.django_db
+def test_get_user_for_login_returns_none_when_username_wrong():
+    User.objects.create_user(username="ulogin3", email="right3@test.com", password="pw")
+    result = get_user_for_login(email="right3@test.com", username="wrongname")
+    assert result is None
+
+
+# ── Mass-assignment protection (AC-12) ───────────────────────────────────────
+
+
+def test_signup_serializer_no_extra_fields():
+    """SignupSerializer must not expose unexpected fields."""
+    allowed = {"email", "username", "password", "full_name", "aadhaar"}
+    ser = SignupSerializer()
+    assert set(ser.fields.keys()) == allowed
+
+
+def test_login_serializer_no_extra_fields():
+    allowed = {"email", "username", "password"}
+    ser = LoginRequestSerializer()
+    assert set(ser.fields.keys()) == allowed
+
+
+def test_otp_verify_serializer_no_extra_fields():
+    allowed = {"token_id", "code"}
+    ser = OtpVerifySerializer()
+    assert set(ser.fields.keys()) == allowed
+
+
+@pytest.mark.django_db
+def test_me_serializer_read_only_fields():
+    """All MeSerializer fields must be read-only (AC-12)."""
+    user = User.objects.create_user(username="metest", email="me@test.com", password="pw")
+    ser = MeSerializer(user)
+    for field_name, field in ser.fields.items():
+        assert field.read_only, f"Field '{field_name}' should be read-only"
+
+
+# ── Login view: three-credential check ───────────────────────────────────────
+
+
+@pytest.mark.django_db
+@override_settings(
+    OTP_TTL_SECONDS=600,
+    OTP_MAX_ATTEMPTS=5,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+def test_login_view_correct_credentials_issues_otp():
+    User.objects.create_user(
+        username="loginok",
+        email="loginok@test.com",
+        password="goodpassword123",
+    )
+    client = APIClient()
+    resp = client.post(
+        "/api/identity/login/",
+        {"email": "loginok@test.com", "username": "loginok", "password": "goodpassword123"},
+        format="json",
+    )
+    assert resp.status_code == 200
+    assert "token_id" in resp.data
+    assert "masked_email" in resp.data
+
+
+@pytest.mark.django_db
+def test_login_view_wrong_password_returns_401():
+    User.objects.create_user(
+        username="loginbad",
+        email="loginbad@test.com",
+        password="correctpassword",
+    )
+    client = APIClient()
+    resp = client.post(
+        "/api/identity/login/",
+        {"email": "loginbad@test.com", "username": "loginbad", "password": "wrongpassword"},
+        format="json",
+    )
+    assert resp.status_code == 401
+    assert resp.data["detail"] == "Invalid credentials."
+
+
+@pytest.mark.django_db
+def test_login_view_wrong_email_returns_401():
+    """Third credential: correct username+password but email doesn't match."""
+    User.objects.create_user(
+        username="login3cred",
+        email="real@test.com",
+        password="goodpass123",
+    )
+    client = APIClient()
+    resp = client.post(
+        "/api/identity/login/",
+        {"email": "fake@test.com", "username": "login3cred", "password": "goodpass123"},
+        format="json",
+    )
+    assert resp.status_code == 401
+    assert resp.data["detail"] == "Invalid credentials."
+
+
+# ── django-axes lockout (AC-06) ───────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+@override_settings(AXES_FAILURE_LIMIT=5, AXES_COOLOFF_TIME=1)
+def test_axes_lockout_after_five_failed_logins():
+    """After 5 failed login attempts, django-axes should block the account."""
+    User.objects.create_user(
+        username="axestest",
+        email="axestest@test.com",
+        password="correctpassword",
+    )
+    client = APIClient()
+    for _ in range(5):
+        client.post(
+            "/api/identity/login/",
+            {
+                "email": "axestest@test.com",
+                "username": "axestest",
+                "password": "wrongpassword",
+            },
+            format="json",
+        )
+
+    # 6th attempt — should be blocked (axes 403 or DRF throttle 429)
+    resp = client.post(
+        "/api/identity/login/",
+        {
+            "email": "axestest@test.com",
+            "username": "axestest",
+            "password": "wrongpassword",
+        },
+        format="json",
+    )
+    # 403 = axes lockout, 429 = DRF ScopedRateThrottle — both mean the account is protected
+    assert resp.status_code in (403, 429)

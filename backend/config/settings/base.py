@@ -36,6 +36,7 @@ LOCAL_APPS = [
     "apps.certificates",
     "apps.compliance",
     "apps.api",
+    "apps.notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -46,6 +47,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "apps.identity.middleware.IdleTimeoutMiddleware",
     "simple_history.middleware.HistoryRequestMiddleware",
     "axes.middleware.AxesMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -98,6 +100,12 @@ MEDIA_ROOT = BASE_DIR / "mediafiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
+# ── OTP / Session TTL ─────────────────────────────────────────────────────────
+OTP_TTL_SECONDS = 600  # 10 minutes
+OTP_MAX_ATTEMPTS = 5
+APPLICANT_SESSION_TTL_SECONDS = 45 * 60  # 45 minutes
+OFFICER_SESSION_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+
 # ── DRF ──────────────────────────────────────────────────────────────────────
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -110,6 +118,7 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.ScopedRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
+        "signup": "5/min",
         "login": "5/min",
         "otp": "5/min",
         "otp_resend": "3/min",
@@ -117,6 +126,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 25,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "EXCEPTION_HANDLER": "apps.common.exceptions.domain_exception_handler",
 }
 
 # ── drf-spectacular ───────────────────────────────────────────────────────────
