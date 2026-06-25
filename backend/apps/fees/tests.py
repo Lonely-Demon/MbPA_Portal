@@ -1,8 +1,9 @@
-import datetime
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 
 from apps.fees.models import ConfigParameter
 from apps.fees.services import get_active_config, get_decimal_config
@@ -19,7 +20,7 @@ def _make_superuser(username="admin_fee"):
 def _make_config(key, value, days_offset=0, superuser=None):
     if superuser is None:
         superuser = _make_superuser()
-    date = datetime.date.today() - datetime.timedelta(days=days_offset)
+    date = timezone.now().date() - timedelta(days=days_offset)
     return ConfigParameter.objects.create(
         key=key,
         value=value,
@@ -47,7 +48,7 @@ def test_get_active_config_ignores_future_rows():
     ConfigParameter.objects.create(
         key="future_key",
         value="999.00",
-        effective_from=datetime.date.today() + datetime.timedelta(days=30),
+        effective_from=timezone.now().date() + timedelta(days=30),
         created_by=su,
     )
     _make_config("future_key", "10.00", days_offset=1, superuser=su)

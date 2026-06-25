@@ -175,7 +175,7 @@ if R2_ACCOUNT_ID:
                 "default_acl": None,
                 "querystring_auth": True,
                 "querystring_expire": 300,  # AC-21: 5-minute presign TTL
-                "file_overwrite": False,    # belt-and-suspenders alongside AC-20 app-level versioning
+                "file_overwrite": False,  # belt-and-suspenders alongside AC-20 versioning
             },
         },
         "staticfiles": {
@@ -183,7 +183,7 @@ if R2_ACCOUNT_ID:
         },
     }
 
-DOCUMENT_MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB; per-slot overrides deferred to later phase
+DOCUMENT_MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB global cap; per-slot overrides deferred
 
 # ── Email (Resend via SMTP) ───────────────────────────────────────────────────
 EMAIL_BACKEND = env(
