@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class Stream(models.Model):
@@ -158,6 +159,13 @@ class ApplicationParty(models.Model):
 
     class Meta:
         db_table = "applications_party"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["application"],
+                condition=Q(is_account_of_record=True),
+                name="one_account_of_record_per_app",
+            )
+        ]
 
 
 class MilestoneInstance(models.Model):

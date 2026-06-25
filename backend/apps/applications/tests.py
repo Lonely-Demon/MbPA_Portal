@@ -1,9 +1,24 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pytest
-from django.db import connection
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, connection
 
-from apps.applications.services import generate_application_number
+from apps.applications.models import (
+    Application,
+    ApplicationParty,
+    Milestone,
+    MilestoneInstance,
+    Stream,
+    StreamMilestone,
+)
+from apps.applications.services import (
+    create_application,
+    generate_application_number,
+    submit_application,
+)
+
+User = get_user_model()
 
 
 @pytest.mark.django_db
@@ -74,3 +89,178 @@ def test_generate_application_number_idempotent_across_years():
     generate_application_number(year=2026)
     third = generate_application_number(year=2026)
     assert third == "MBPASPA20260003"
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _make_user(username="applicant1"):
+    return User.objects.create_user(username=username, password="pass123")
+
+
+def _make_stream(code="new_building"):
+    return Stream.objects.create(code=code, name=f"Stream {code}")
+
+
+def _make_milestone(code="S1", sla_days=21):
+    return Milestone.objects.create(
+        code=code, name=f"Milestone {code}", default_sla_working_days=sla_days
+    )
+
+
+def _make_stream_milestone(stream, milestone, sequence=1, deemed=True, role=""):
+    return StreamMilestone.objects.create(
+        stream=stream,
+        milestone=milestone,
+        sequence=sequence,
+        deemed_clearance_eligible=deemed,
+        required_officer_role=role,
+    )
+
+
+# ── AccountOfRecordUniquenessTests (AC-05) ───────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_account_of_record_uniqueness_enforced():
+    """
+    AC-05: Only one ApplicationParty with is_account_of_record=True is allowed
+    per application. A second insert must raise IntegrityError (partial unique index).
+
+    Note: SQLite supports partial indexes since 3.8.9. If the test environment
+    uses an older SQLite, this will be skipped.
+    """
+    import sqlite3
+
+    if connection.vendor == "sqlite":
+        sqlite_ver = tuple(int(x) for x in sqlite3.sqlite_version.split("."))
+        if sqlite_ver < (3, 8, 9):
+            pytest.skip("Partial unique index requires SQLite >= 3.8.9")
+
+    user = _make_user()
+    stream = _make_stream()
+    app = Application.objects.create(
+        stream=stream, submitted_by=user, status=Application.STATUS_DRAFT
+    )
+    ApplicationParty.objects.create(
+        application=app,
+        user=user,
+        party_role=ApplicationParty.ROLE_CO_OWNER,
+        is_account_of_record=True,
+    )
+    with pytest.raises(IntegrityError):
+        ApplicationParty.objects.create(
+            application=app,
+            user=user,
+            party_role=ApplicationParty.ROLE_ARCHITECT,
+            is_account_of_record=True,
+        )
+
+
+@pytest.mark.django_db
+def test_non_account_of_record_not_constrained():
+    """Multiple non-account-of-record parties are allowed on the same application."""
+    user = _make_user()
+    stream = _make_stream()
+    app = Application.objects.create(
+        stream=stream, submitted_by=user, status=Application.STATUS_DRAFT
+    )
+    ApplicationParty.objects.create(
+        application=app,
+        user=user,
+        party_role=ApplicationParty.ROLE_ARCHITECT,
+        is_account_of_record=False,
+    )
+    ApplicationParty.objects.create(
+        application=app,
+        user=user,
+        party_role=ApplicationParty.ROLE_CO_OWNER,
+        is_account_of_record=False,
+    )
+    assert ApplicationParty.objects.filter(application=app).count() == 2
+
+
+# ── create_application ────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_create_application_creates_draft_with_account_of_record():
+    user = _make_user()
+    stream = _make_stream()
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    assert app.status == Application.STATUS_DRAFT
+    assert app.application_number == ""
+    assert ApplicationParty.objects.filter(application=app, is_account_of_record=True).count() == 1
+
+
+# ── submit_application ────────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_submit_creates_first_milestone_instance():
+    """
+    submit_application transitions the application to SUBMITTED and creates a
+    sequence=1 MilestoneInstance with status=IN_PROGRESS and a due_at set
+    beyond started_at.
+    """
+    user = _make_user()
+    stream = _make_stream()
+    milestone = _make_milestone("S1", sla_days=21)
+    _make_stream_milestone(stream, milestone, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submitted = submit_application(application_id=app.pk, submitted_by=user)
+
+    assert submitted.status == Application.STATUS_SUBMITTED
+    assert submitted.application_number.startswith("MBPASPA")
+
+    instances = MilestoneInstance.objects.filter(application=submitted)
+    assert instances.count() == 1
+    instance = instances.first()
+    assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS
+    assert instance.started_at is not None
+    assert instance.due_at is not None
+    assert instance.due_at > instance.started_at
+    assert instance.stream_milestone.sequence == 1
+
+
+@pytest.mark.django_db
+def test_submit_application_with_no_officer_for_role_leaves_unassigned():
+    """
+    When no active officer exists for the required role, assigned_officer must
+    be NULL — submit_application must not raise.
+    """
+    user = _make_user()
+    stream = _make_stream()
+    milestone = _make_milestone("S1", sla_days=21)
+    _make_stream_milestone(stream, milestone, sequence=1, role="junior_planner")
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submitted = submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=submitted)
+    assert instance.assigned_officer is None
+
+
+@pytest.mark.django_db
+def test_submit_application_assigns_officer_when_available():
+    """
+    When an active officer with the required role exists, assigned_officer is set.
+    """
+    from apps.identity.models import OfficerProfile
+
+    user = _make_user()
+    officer_user = User.objects.create_user(
+        username="officer_s1", password="pass", user_type=User.USER_TYPE_OFFICER
+    )
+    OfficerProfile.objects.create(user=officer_user, role="junior_planner", is_active_officer=True)
+
+    stream = _make_stream()
+    milestone = _make_milestone("S1", sla_days=21)
+    _make_stream_milestone(stream, milestone, sequence=1, role="junior_planner")
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submitted = submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=submitted)
+    assert instance.assigned_officer == officer_user
