@@ -7,7 +7,7 @@ pytest-cov==5.*
 factory-boy==3.*
 
 # ── Linting / type-checking ───────────────────────────────────────────────────
-ruff==0.4.*
+ruff==0.15.*
 mypy==1.10.*
 django-stubs[compatible-mypy]==5.*
 djangorestframework-stubs==3.*
