@@ -372,3 +372,23 @@ def test_seed_reference_data_seeds_2nd_4th_saturdays():
     # There should be 24 2nd/4th Saturday rows for 2026 (2 per month x 12 months)
     sat_count = Holiday.objects.filter(description__contains="Saturday").count()
     assert sat_count == 24, f"Expected 24 2nd/4th Saturday rows, got {sat_count}"
+
+
+@pytest.mark.django_db
+def test_seed_reference_data_stream_sequences_are_contiguous():
+    from apps.applications.models import Stream, StreamMilestone
+
+    call_command("seed_reference_data", verbosity=0)
+
+    for stream in Stream.objects.all():
+        sequences = list(
+            StreamMilestone.objects.filter(stream=stream)
+            .values_list("sequence", flat=True)
+            .order_by("sequence")
+        )
+        assert sequences, f"Stream {stream.code!r} has no StreamMilestone rows"
+        expected = list(range(1, len(sequences) + 1))
+        assert sequences == expected, (
+            f"Stream {stream.code!r} has non-contiguous sequences: "
+            f"{sequences} (expected {expected})"
+        )
