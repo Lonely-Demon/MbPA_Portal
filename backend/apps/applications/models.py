@@ -35,8 +35,9 @@ class StreamMilestone(models.Model):
     stream = models.ForeignKey(Stream, on_delete=models.CASCADE, related_name="stream_milestones")
     milestone = models.ForeignKey(Milestone, on_delete=models.PROTECT, related_name="stream_milestones")
     sequence = models.PositiveSmallIntegerField()
-    # OC (S7) is NEVER auto-cleared; all other milestones may use deemed clearance
-    deemed_clearance_eligible = models.BooleanField(default=True)
+    # Safe default: opt-IN to deemed clearance by explicitly setting True.
+    # Omitting this field always produces the safe (non-clearable) state.
+    deemed_clearance_eligible = models.BooleanField(default=False)
     required_officer_role = models.CharField(max_length=20, blank=True)
 
     class Meta:

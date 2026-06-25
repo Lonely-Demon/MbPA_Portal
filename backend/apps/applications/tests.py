@@ -53,11 +53,15 @@ def test_generate_application_number_concurrent_no_duplicates():
 
     assert len(numbers) == count, "Wrong number of results"
     assert len(set(numbers)) == count, (
-        f"Duplicate application numbers under concurrency: {sorted(set(n for n in numbers if numbers.count(n) > 1))}"
+        f"Duplicate application numbers under concurrency: "
+        f"{sorted(set(n for n in numbers if numbers.count(n) > 1))}"
     )
-    # Every number must match the expected format
-    for n in numbers:
-        assert n.startswith("MBPASPA2026"), f"Unexpected prefix: {n}"
+    # Assert strict gaplessness: suffixes must form a contiguous range 1..count
+    prefix = f"MBPASPA{year}"
+    suffixes = sorted(int(n[len(prefix):]) for n in numbers)
+    assert suffixes == list(range(1, count + 1)), (
+        f"Gaps detected in application number sequence: {suffixes}"
+    )
 
 
 @pytest.mark.django_db(transaction=True)

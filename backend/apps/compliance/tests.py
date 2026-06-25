@@ -205,3 +205,52 @@ def test_eligible_milestone_is_auto_deemed():
     assert instance.status == MilestoneInstance.STATUS_DEEMED
     assert instance.is_deemed
     assert instance.completed_at is not None
+
+
+@pytest.mark.django_db
+def test_oc_milestone_never_auto_deemed_even_if_flag_is_wrong():
+    """
+    AC-18 redundancy: if deemed_clearance_eligible is accidentally set True on
+    an OC StreamMilestone (data corruption, missed migration, admin error), the
+    hardcoded OC_NEVER_DEEMED_CODES guard in run_sla_sweep must still refuse to
+    auto-clear it.
+
+    This is the test that the earlier version structurally could not cover —
+    the previous test only proved the sweep respects a correctly-set False flag.
+    This one proves the sweep refuses even when the flag says it's eligible.
+    """
+    user = _make_user("officer3")
+    stream = _make_stream("S7B")
+    milestone = _make_milestone("OC")  # code="OC" triggers the hardcoded guard
+
+    # Deliberately corrupt: flag is True but code is "OC"
+    corrupt_sm = StreamMilestone.objects.create(
+        stream=stream,
+        milestone=milestone,
+        sequence=7,
+        deemed_clearance_eligible=True,  # wrong — simulates data corruption
+    )
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20260003",
+    )
+    now = timezone.now()
+    instance = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=corrupt_sm,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=now - timedelta(days=60),
+        due_at=now - timedelta(days=30),
+    )
+
+    call_command("run_sla_sweep", verbosity=0)
+
+    instance.refresh_from_db()
+    assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS, (
+        "Hardcoded OC guard failed: sweep auto-cleared an OC milestone "
+        "even though OC_NEVER_DEEMED_CODES should have blocked it"
+    )
+    assert not instance.is_deemed
+    assert instance.completed_at is None
