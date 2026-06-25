@@ -264,3 +264,425 @@ def test_submit_application_assigns_officer_when_available():
 
     instance = MilestoneInstance.objects.get(application=submitted)
     assert instance.assigned_officer == officer_user
+
+
+# ── transition_milestone ──────────────────────────────────────────────────────
+
+
+def _make_officer(username="officer_act", role="junior_planner"):
+    from apps.identity.models import OfficerProfile
+
+    officer_user = User.objects.create_user(
+        username=username, password="pass", user_type=User.USER_TYPE_OFFICER
+    )
+    OfficerProfile.objects.create(user=officer_user, role=role, is_active_officer=True)
+    return officer_user
+
+
+@pytest.mark.django_db
+def test_transition_approve_creates_next_milestone():
+    """Approving milestone sequence=1 creates sequence=2 MilestoneInstance."""
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer()
+    user = _make_user("app_owner")
+    stream = _make_stream()
+    ms1 = _make_milestone("S1", sla_days=5)
+    ms2 = _make_milestone("S2", sla_days=10)
+    sm1 = _make_stream_milestone(stream, ms1, sequence=1)
+    _make_stream_milestone(stream, ms2, sequence=2)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance1 = MilestoneInstance.objects.get(application=app, stream_milestone=sm1)
+    instance1.assigned_officer = officer
+    instance1.save(update_fields=["assigned_officer"])
+
+    transition_milestone(
+        milestone_instance_id=instance1.pk,
+        action="approve",
+        acting_officer=officer,
+        decision_note="Looks good",
+    )
+
+    instance1.refresh_from_db()
+    assert instance1.status == MilestoneInstance.STATUS_APPROVED
+    assert instance1.completed_at is not None
+
+    next_instances = MilestoneInstance.objects.filter(application=app, stream_milestone__sequence=2)
+    assert next_instances.count() == 1
+    next_inst = next_instances.first()
+    assert next_inst.status == MilestoneInstance.STATUS_IN_PROGRESS
+    assert next_inst.due_at > next_inst.started_at
+
+
+@pytest.mark.django_db
+def test_transition_approve_last_milestone_marks_application_approved():
+    """Approving the last milestone in the stream marks the application APPROVED."""
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_last")
+    user = _make_user("app_owner2")
+    stream = _make_stream("last_test_stream")
+    ms = _make_milestone("OC_T", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    transition_milestone(
+        milestone_instance_id=instance.pk,
+        action="approve",
+        acting_officer=officer,
+    )
+
+    app.refresh_from_db()
+    assert app.status == Application.STATUS_APPROVED
+
+
+@pytest.mark.django_db
+def test_transition_reject_marks_application_rejected():
+    """Rejecting a milestone marks both the milestone and application as rejected."""
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_rej")
+    user = _make_user("app_owner3")
+    stream = _make_stream("rej_stream")
+    ms = _make_milestone("S1_R", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    transition_milestone(
+        milestone_instance_id=instance.pk,
+        action="reject",
+        acting_officer=officer,
+        decision_note="Missing documents",
+    )
+
+    instance.refresh_from_db()
+    app.refresh_from_db()
+    assert instance.status == MilestoneInstance.STATUS_REJECTED
+    assert app.status == Application.STATUS_REJECTED
+
+
+@pytest.mark.django_db
+def test_transition_return_for_correction_records_reason():
+    """RETURN_FOR_CORRECTION records the reason without closing the milestone."""
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_ret")
+    user = _make_user("app_owner4")
+    stream = _make_stream("ret_stream")
+    ms = _make_milestone("S1_C", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    transition_milestone(
+        milestone_instance_id=instance.pk,
+        action="return_for_correction",
+        acting_officer=officer,
+        correction_reason="Plan drawings incomplete",
+    )
+
+    instance.refresh_from_db()
+    assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS
+    assert "incomplete" in instance.officer_remarks
+
+
+# ── SeparationOfDutiesTests (AC-09) ──────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_separation_of_duties_blocks_party_officer():
+    """
+    AC-09: An officer who is listed as an ApplicationParty may not act on any
+    milestone for that application.
+    """
+    from apps.applications.exceptions import SeparationOfDutiesError
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_party")
+    user = _make_user("owner_sod")
+    stream = _make_stream("sod_stream")
+    ms = _make_milestone("S1_SOD", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    # Add the officer as a party to the application
+    ApplicationParty.objects.create(
+        application=app,
+        user=officer,
+        party_role=ApplicationParty.ROLE_ARCHITECT,
+        is_account_of_record=False,
+    )
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    with pytest.raises(SeparationOfDutiesError):
+        transition_milestone(
+            milestone_instance_id=instance.pk,
+            action="approve",
+            acting_officer=officer,
+        )
+
+
+# ── StrictMilestoneSequencingTests (AC-29) ───────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_strict_milestone_sequencing_blocks_out_of_order_action():
+    """
+    AC-29: An officer cannot approve milestone sequence=2 before sequence=1
+    is cleared (APPROVED or DEEMED).
+    """
+    from apps.applications.exceptions import InvalidTransitionError
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_seq")
+    user = _make_user("owner_seq")
+    stream = _make_stream("seq_stream")
+    ms1 = _make_milestone("S1_SEQ", sla_days=5)
+    ms2 = _make_milestone("S2_SEQ", sla_days=5)
+    sm1 = _make_stream_milestone(stream, ms1, sequence=1)
+    sm2 = _make_stream_milestone(stream, ms2, sequence=2)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    # Manually create instance2 (skipping sequence=1 completion)
+    instance2 = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm2,
+        assigned_officer=officer,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=None,
+        due_at=None,
+    )
+
+    # sequence=1 is still IN_PROGRESS, not cleared — should raise
+    instance1 = MilestoneInstance.objects.get(application=app, stream_milestone=sm1)
+    assert instance1.status == MilestoneInstance.STATUS_IN_PROGRESS
+
+    with pytest.raises(InvalidTransitionError, match="prior-sequence"):
+        transition_milestone(
+            milestone_instance_id=instance2.pk,
+            action="approve",
+            acting_officer=officer,
+        )
+
+
+# ── IdorOfficerQueueTests (AC-08) ─────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_officer_queue_only_shows_own_milestones():
+    """
+    AC-08: officer_queue returns only milestones assigned to the requesting
+    officer, not those of other officers.
+    """
+    from apps.applications.selectors import officer_queue
+
+    officer1 = _make_officer("officer_q1")
+    officer2 = _make_officer("officer_q2")
+    user = _make_user("owner_q")
+    stream = _make_stream("q_stream")
+    ms = _make_milestone("S1_Q", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer1
+    instance.save(update_fields=["assigned_officer"])
+
+    assert officer_queue(officer1).count() == 1
+    assert officer_queue(officer2).count() == 0
+
+
+@pytest.mark.django_db
+def test_officer_queue_excludes_completed_milestones():
+    """Completed (APPROVED/REJECTED/DEEMED) milestones are not in the queue."""
+    from apps.applications.selectors import officer_queue
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_done")
+    user = _make_user("owner_done")
+    stream = _make_stream("done_stream")
+    ms = _make_milestone("S1_D", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    assert officer_queue(officer).count() == 1
+
+    transition_milestone(
+        milestone_instance_id=instance.pk,
+        action="approve",
+        acting_officer=officer,
+    )
+    # After approval, original instance is gone from queue (it's APPROVED)
+    assert officer_queue(officer).count() == 0
+
+
+# ── Concurrent transition (AC-02, PostgreSQL-gated) ──────────────────────────
+
+
+@pytest.mark.django_db(transaction=True)
+def test_concurrent_milestone_transition_serialized():
+    """
+    AC-02: Two concurrent attempts to transition the same MilestoneInstance
+    must not both succeed. The second must raise ConcurrentModificationError.
+
+    PostgreSQL-gated: SQLite doesn't support concurrent connections.
+    """
+    if connection.vendor != "postgresql":
+        pytest.skip("Concurrency test requires PostgreSQL")
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    from apps.applications.exceptions import ConcurrentModificationError
+    from apps.applications.services import transition_milestone
+
+    officer = _make_officer("officer_con")
+    user = _make_user("owner_con")
+    stream = _make_stream("con_stream")
+    ms = _make_milestone("S1_CON", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    results = []
+
+    def do_transition():
+        try:
+            transition_milestone(
+                milestone_instance_id=instance.pk,
+                action="reject",
+                acting_officer=officer,
+                decision_note="concurrent",
+            )
+            results.append("ok")
+        except ConcurrentModificationError:
+            results.append("concurrent_error")
+        except Exception as exc:
+            results.append(f"other:{exc}")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(do_transition) for _ in range(2)]
+        for f in futures:
+            f.result()
+
+    assert "ok" in results, "Neither transition succeeded"
+    assert "concurrent_error" in results, (
+        "Both transitions succeeded — concurrent modification not detected"
+    )
+
+
+# ── test_sla_sweep_against_seeded_reference_data ──────────────────────────────
+
+
+@pytest.mark.django_db
+def test_sla_sweep_against_seeded_reference_data():
+    """
+    Integration test: run_sla_sweep against seeded reference data.
+    - A non-OC MilestoneInstance past its due_at with deemed_clearance_eligible=True
+      must be marked DEEMED by the sweep.
+    - An OC MilestoneInstance past its due_at must NOT be auto-cleared (AC-18).
+    """
+    from datetime import timedelta
+
+    from django.core.management import call_command
+    from django.utils import timezone
+
+    from apps.applications.models import Milestone, Stream, StreamMilestone
+
+    # Seed reference data (streams + milestones + holidays; no ConfigParameter without superuser)
+    call_command("seed_reference_data", verbosity=0)
+
+    officer = _make_officer("officer_sweep")
+    user = _make_user("owner_sweep")
+
+    # Use the seeded new_building stream
+    stream = Stream.objects.get(code="new_building")
+    sm_s1 = StreamMilestone.objects.get(stream=stream, sequence=1)
+    oc_milestone = Milestone.objects.get(code="OC")
+    stream_oc = Stream.objects.get(code="addition")
+    sm_oc = StreamMilestone.objects.get(stream=stream_oc, milestone=oc_milestone)
+
+    now = timezone.now()
+
+    # Application 1: non-OC milestone past SLA, deemed_clearance_eligible=True
+    app1 = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20260901",
+    )
+    eligible_instance = MilestoneInstance.objects.create(
+        application=app1,
+        stream_milestone=sm_s1,
+        assigned_officer=officer,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=now - timedelta(days=60),
+        due_at=now - timedelta(days=10),
+    )
+
+    # Application 2: OC milestone past SLA — must NOT be auto-cleared
+    app2 = Application.objects.create(
+        stream=stream_oc,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20260902",
+    )
+    oc_instance = MilestoneInstance.objects.create(
+        application=app2,
+        stream_milestone=sm_oc,
+        assigned_officer=officer,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=now - timedelta(days=60),
+        due_at=now - timedelta(days=10),
+    )
+
+    call_command("run_sla_sweep", verbosity=0)
+
+    eligible_instance.refresh_from_db()
+    oc_instance.refresh_from_db()
+
+    assert eligible_instance.status == MilestoneInstance.STATUS_DEEMED, (
+        f"Non-OC eligible instance was not deemed by sweep (status: {eligible_instance.status!r})"
+    )
+    assert oc_instance.status == MilestoneInstance.STATUS_IN_PROGRESS, (
+        f"OC instance was incorrectly auto-deemed (status: {oc_instance.status!r})"
+    )

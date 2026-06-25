@@ -133,6 +133,180 @@ def submit_application(*, application_id: int, submitted_by: User) -> Applicatio
     return application
 
 
+ACTION_APPROVE = "approve"
+ACTION_RETURN_FOR_CORRECTION = "return_for_correction"
+ACTION_REJECT = "reject"
+VALID_ACTIONS = frozenset({ACTION_APPROVE, ACTION_RETURN_FOR_CORRECTION, ACTION_REJECT})
+
+
+def _assign_officer_for_sm(sm: StreamMilestone):
+    """Return the first active officer matching sm.required_officer_role, or None."""
+    from apps.identity.models import OfficerProfile
+
+    if not sm.required_officer_role:
+        return None
+    profile = (
+        OfficerProfile.objects.filter(role=sm.required_officer_role, is_active_officer=True)
+        .select_related("user")
+        .first()
+    )
+    return profile.user if profile else None
+
+
+@transaction.atomic
+def transition_milestone(
+    *,
+    milestone_instance_id: int,
+    action: str,
+    acting_officer: User,
+    decision_note: str = "",
+    correction_reason: str = "",
+) -> MilestoneInstance:
+    """
+    Advance, return, or reject a MilestoneInstance.
+
+    AC-02: Uses select_for_update() to serialise concurrent transitions.
+    AC-09: Refuses if acting_officer is an ApplicationParty.
+    AC-29: Refuses if any prior-sequence milestone is not cleared (APPROVED/DEEMED).
+    """
+    from apps.applications.exceptions import (
+        ConcurrentModificationError,
+        InvalidTransitionError,
+        SeparationOfDutiesError,
+    )
+    from apps.compliance.services import compute_due_at, record_audit_event
+
+    if action not in VALID_ACTIONS:
+        raise InvalidTransitionError(
+            f"Unknown action {action!r}. Valid actions: {sorted(VALID_ACTIONS)}"
+        )
+
+    # AC-02: lock the row so concurrent requests serialise here.
+    try:
+        instance = (
+            MilestoneInstance.objects.select_related(
+                "application__stream", "stream_milestone__milestone"
+            )
+            .select_for_update()
+            .get(pk=milestone_instance_id)
+        )
+    except MilestoneInstance.DoesNotExist:
+        raise InvalidTransitionError(
+            f"MilestoneInstance {milestone_instance_id} does not exist."
+        ) from None
+
+    # If the instance is already terminal, a concurrent request got here first.
+    if instance.status not in (MilestoneInstance.STATUS_IN_PROGRESS,):
+        raise ConcurrentModificationError(
+            f"MilestoneInstance {milestone_instance_id} is already in status "
+            f"{instance.status!r} — possibly processed by a concurrent request."
+        )
+
+    application = instance.application
+    current_sm = instance.stream_milestone
+
+    # AC-09: separation of duties — applicant-side parties may not act.
+    if ApplicationParty.objects.filter(application=application, user=acting_officer).exists():
+        raise SeparationOfDutiesError(
+            "Acting officer is listed as an ApplicationParty on this application "
+            "and may not act on its milestones (AC-09 separation of duties)."
+        )
+
+    # AC-29: strict sequencing — all prior milestones must be cleared first.
+    prior_sms = StreamMilestone.objects.filter(
+        stream=application.stream, sequence__lt=current_sm.sequence
+    ).values_list("pk", flat=True)
+    uncleared = MilestoneInstance.objects.filter(
+        application=application,
+        stream_milestone__in=prior_sms,
+    ).exclude(status__in=(MilestoneInstance.STATUS_APPROVED, MilestoneInstance.STATUS_DEEMED))
+    if uncleared.exists():
+        raise InvalidTransitionError(
+            "Cannot act on this milestone: one or more prior-sequence milestones "
+            "are not yet cleared (AC-29 strict sequencing)."
+        )
+
+    now = timezone.now()
+
+    if action == ACTION_APPROVE:
+        instance.status = MilestoneInstance.STATUS_APPROVED
+        instance.completed_at = now
+        instance.officer_remarks = decision_note
+        instance.save(update_fields=["status", "completed_at", "officer_remarks"])
+
+        record_audit_event(
+            verb="milestone.approved",
+            target_type="MilestoneInstance",
+            target_id=instance.pk,
+            actor=acting_officer,
+            payload={
+                "application": application.application_number,
+                "milestone": current_sm.milestone.code,
+                "sequence": current_sm.sequence,
+                "decision_note": decision_note,
+            },
+        )
+
+        # Look for the next milestone in sequence.
+        try:
+            next_sm = StreamMilestone.objects.select_related("milestone").get(
+                stream=application.stream, sequence=current_sm.sequence + 1
+            )
+        except StreamMilestone.DoesNotExist:
+            # No next milestone — the application is fully approved.
+            application.status = Application.STATUS_APPROVED
+            application.save(update_fields=["status"])
+        else:
+            due_at = compute_due_at(now, next_sm.milestone.default_sla_working_days)
+            MilestoneInstance.objects.create(
+                application=application,
+                stream_milestone=next_sm,
+                assigned_officer=_assign_officer_for_sm(next_sm),
+                status=MilestoneInstance.STATUS_IN_PROGRESS,
+                started_at=now,
+                due_at=due_at,
+            )
+
+    elif action == ACTION_RETURN_FOR_CORRECTION:
+        instance.officer_remarks = correction_reason
+        instance.save(update_fields=["officer_remarks"])
+
+        record_audit_event(
+            verb="milestone.returned_for_correction",
+            target_type="MilestoneInstance",
+            target_id=instance.pk,
+            actor=acting_officer,
+            payload={
+                "application": application.application_number,
+                "milestone": current_sm.milestone.code,
+                "correction_reason": correction_reason,
+            },
+        )
+
+    elif action == ACTION_REJECT:
+        instance.status = MilestoneInstance.STATUS_REJECTED
+        instance.completed_at = now
+        instance.officer_remarks = decision_note
+        instance.save(update_fields=["status", "completed_at", "officer_remarks"])
+
+        application.status = Application.STATUS_REJECTED
+        application.save(update_fields=["status"])
+
+        record_audit_event(
+            verb="milestone.rejected",
+            target_type="MilestoneInstance",
+            target_id=instance.pk,
+            actor=acting_officer,
+            payload={
+                "application": application.application_number,
+                "milestone": current_sm.milestone.code,
+                "decision_note": decision_note,
+            },
+        )
+
+    return instance
+
+
 def assign_application_number(application: Application) -> Application:
     """
     Assign a gapless application number to a draft application on submission.
