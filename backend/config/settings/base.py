@@ -155,23 +155,23 @@ SESSION_COOKIE_SAMESITE = "Lax"
 CSRF_COOKIE_HTTPONLY = False  # React must read csrftoken
 CSRF_COOKIE_SAMESITE = "Lax"
 
-# ── Cloudflare R2 (django-storages) ──────────────────────────────────────────
-R2_ACCOUNT_ID = env("R2_ACCOUNT_ID", default="")
-R2_BUCKET_NAME = env("R2_BUCKET_NAME", default="mbpa-portal")
-R2_ACCESS_KEY_ID = env("R2_ACCESS_KEY_ID", default="")
-R2_SECRET_ACCESS_KEY = env("R2_SECRET_ACCESS_KEY", default="")
+# ── Backblaze B2 (django-storages S3-compatible API) ─────────────────────────
+B2_KEY_ID = env("B2_KEY_ID", default="")
+B2_APPLICATION_KEY = env("B2_APPLICATION_KEY", default="")
+B2_BUCKET_NAME = env("B2_BUCKET_NAME", default="mbpa-portal")
+B2_REGION = env("B2_REGION", default="")  # e.g. us-west-004
 
-if R2_ACCOUNT_ID:
+if B2_KEY_ID:
     STORAGES = {
         "default": {
             "BACKEND": "storages.backends.s3.S3Storage",
             "OPTIONS": {
-                "bucket_name": R2_BUCKET_NAME,
-                "endpoint_url": f"https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-                "region_name": "auto",
+                "bucket_name": B2_BUCKET_NAME,
+                "endpoint_url": f"https://s3.{B2_REGION}.backblazeb2.com",
+                "region_name": B2_REGION,
                 "signature_version": "s3v4",
-                "access_key": R2_ACCESS_KEY_ID,
-                "secret_key": R2_SECRET_ACCESS_KEY,
+                "access_key": B2_KEY_ID,
+                "secret_key": B2_APPLICATION_KEY,
                 "default_acl": None,
                 "querystring_auth": True,
                 "querystring_expire": 300,  # AC-21: 5-minute presign TTL
