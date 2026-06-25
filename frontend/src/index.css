@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+@theme {
+  /* Maritime colour palette */
+  --color-harbour: #0a2540;
+  --color-harbour-light: #0d3160;
+  --color-brass: #c9952a;
+  --color-brass-light: #e0b44a;
+  --color-teal: #0e7c86;
+  --color-teal-light: #13a3b0;
+  --color-paper: #f6f3ec;
+  --color-paper-dark: #ede9e0;
+  --color-slate: #4a5568;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, Consolas, monospace;
+
+  /* Spacing extensions */
+  --radius: 0.5rem;
+}
+
+/* Base resets */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--color-paper);
+  color: var(--color-harbour);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}

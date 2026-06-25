@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    name: Backend — lint / type-check / test
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mbpa_test
+          POSTGRES_USER: mbpa
+          POSTGRES_PASSWORD: mbpa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.local
+      DJANGO_SECRET_KEY: ci-not-a-real-secret-key-do-not-use
+      DATABASE_URL: postgres://mbpa:mbpa@localhost:5432/mbpa_test
+      AADHAAR_PEPPER: ci-pepper-64-chars-placeholder-not-real
+
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy
+        run: mypy --config-file ../pyproject.toml .
+        continue-on-error: true  # remove once stubs are fully typed
+
+      - name: Check migrations are up to date
+        run: python manage.py migrate --check
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Run tests
+        run: pytest --cov=apps --cov-report=xml -q
+
+      - name: Bandit security scan
+        run: bandit -r apps/ -c ../pyproject.toml -q
+
+      - name: pip-audit
+        run: pip-audit -r requirements.txt
+
+  frontend:
+    name: Frontend — type-check / build
+    runs-on: ubuntu-22.04
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build

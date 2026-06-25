@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+*.so
+
+# Django
+*.sqlite3
+backend/.env
+backend/staticfiles/
+backend/mediafiles/
+backend/db.sqlite3
+
+# Coverage
+.coverage
+htmlcov/
+coverage.xml
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Secrets — NEVER commit
+.env
+*.pem
+*.key
+secrets/
