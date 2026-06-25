@@ -18,6 +18,7 @@ import datetime
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
+from django.utils import timezone
 
 
 class Command(BaseCommand):
@@ -138,7 +139,7 @@ class Command(BaseCommand):
             "benchmark.additional_fsi": "1.50",
             "benchmark.open_space_shortfall": "30.0",
         }
-        today = datetime.date.today()
+        today = timezone.now().date()
         seeded = 0
         for key, value in PLACEHOLDER_VALUES.items():
             _, created = ConfigParameter.objects.get_or_create(

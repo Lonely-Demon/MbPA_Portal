@@ -1,7 +1,9 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 from apps.applications.models import Application
+from apps.common.exceptions import FeeAssessmentLockedError
 
 
 class ConfigParameter(models.Model):
@@ -30,45 +32,23 @@ class ConfigParameter(models.Model):
         return f"{self.key} ({self.effective_from})"
 
 
-class Concession(models.Model):
-    """Premium / concession detected on an application parcel."""
-
-    TYPE_FSI = "fsi"
-    TYPE_OPEN_SPACE = "open_space"
-    TYPE_PARKING = "parking"
-    TYPE_CHOICES = [
-        (TYPE_FSI, "FSI"),
-        (TYPE_OPEN_SPACE, "Open Space"),
-        (TYPE_PARKING, "Parking"),
-    ]
-
-    application = models.ForeignKey(
-        Application, on_delete=models.CASCADE, related_name="concessions"
-    )
-    concession_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
-    detected_value = models.DecimalField(max_digits=12, decimal_places=4)
-    benchmark_value = models.DecimalField(max_digits=12, decimal_places=4)
-    premium_amount = models.DecimalField(max_digits=14, decimal_places=2)
-    source = models.CharField(max_length=100, blank=True)  # e.g. "UPDR-2026 Table 4"
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        db_table = "fees_concession"
-
-
 class FeeAssessment(models.Model):
     """Snapshot of computed fees at assessment time.
 
-    Formula:
-      scrutiny  = 50 * proposed_bua
-      security  = 10 * proposed_bua
-      debris    = 20 * proposed_bua
-      premiums  = concession totals (FSI*1.10, OpenSpace*0.25, Parking*0.40, delta_area*Zonal_RRR)
-      total     = scrutiny + security + debris + premiums
+    Multiple rows may exist per application; at most one has is_current=True
+    (enforced by the partial unique constraint). Reassessment marks the old row
+    is_current=False and creates a new one — history is never deleted.
+
+    Once a payment is verified, is_locked=True is set and any further mutation
+    via save() raises FeeAssessmentLockedError (AC-16).
+
+    config_version snapshots the scrutiny_fee_per_sqm ConfigParameter in effect
+    at assessment time. All seven config values used in the calculation are
+    captured in the audit event payload for full traceability.
     """
 
-    application = models.OneToOneField(
-        Application, on_delete=models.CASCADE, related_name="fee_assessment"
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="fee_assessments"
     )
     config_version = models.ForeignKey(
         ConfigParameter,
@@ -88,12 +68,71 @@ class FeeAssessment(models.Model):
     assessed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="fee_assessments"
     )
-    # Snapshot of bua and rrr used — assessment must not change if app data changes later
     bua_sqm_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
     zonal_rrr_snapshot = models.DecimalField(max_digits=12, decimal_places=2)
 
+    is_current = models.BooleanField(default=True)
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "fees_assessment"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["application"],
+                condition=Q(is_current=True),
+                name="one_current_fee_assessment_per_app",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None:
+            try:
+                current = FeeAssessment.objects.get(pk=self.pk)
+            except FeeAssessment.DoesNotExist:
+                pass
+            else:
+                if current.is_locked:
+                    raise FeeAssessmentLockedError(
+                        "AC-16: FeeAssessment is locked after payment has been verified."
+                    )
+        super().save(*args, **kwargs)
+
+
+class Concession(models.Model):
+    """Premium / concession detected on an application parcel."""
+
+    TYPE_FSI = "fsi"
+    TYPE_OPEN_SPACE = "open_space"
+    TYPE_PARKING = "parking"
+    TYPE_CHOICES = [
+        (TYPE_FSI, "FSI"),
+        (TYPE_OPEN_SPACE, "Open Space"),
+        (TYPE_PARKING, "Parking"),
+    ]
+
+    DETECTION_AUTO = "auto"
+    DETECTION_DECLARED = "declared"
+    DETECTION_CHOICES = [
+        (DETECTION_AUTO, "Auto-detected"),
+        (DETECTION_DECLARED, "Applicant-declared"),
+    ]
+
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="concessions"
+    )
+    concession_type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    detected_value = models.DecimalField(max_digits=12, decimal_places=4)
+    benchmark_value = models.DecimalField(max_digits=12, decimal_places=4)
+    premium_amount = models.DecimalField(max_digits=14, decimal_places=2)
+    source = models.CharField(max_length=100, blank=True)
+    detection_method = models.CharField(
+        max_length=10, choices=DETECTION_CHOICES, default=DETECTION_AUTO
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fees_concession"
 
 
 class Payment(models.Model):
@@ -110,7 +149,7 @@ class Payment(models.Model):
 
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="payments")
     assessment = models.ForeignKey(FeeAssessment, on_delete=models.PROTECT, related_name="payments")
-    challan_reference = models.CharField(max_length=100, db_index=True)  # re-submissions allowed
+    challan_reference = models.CharField(max_length=100, db_index=True)
     claimed_amount = models.DecimalField(max_digits=14, decimal_places=2)
     verified_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_CLAIMED)

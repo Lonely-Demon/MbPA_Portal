@@ -19,6 +19,10 @@ class AadhaarAlreadyRegisteredError(DomainError):
     """The supplied Aadhaar hash matches an existing account."""
 
 
+class FeeAssessmentLockedError(DomainError):
+    """AC-16: FeeAssessment is immutable after a payment has been verified."""
+
+
 def domain_exception_handler(exc, context):
     """DRF exception handler: converts any DomainError subclass to HTTP 409."""
     if isinstance(exc, DomainError):
