@@ -63,6 +63,9 @@ jobs:
         run: mypy --config-file ../pyproject.toml .
         continue-on-error: true
 
+      - name: Apply migrations
+        run: python manage.py migrate
+
       - name: Check no unapplied migrations
         # migrate --check verifies every migration file has been applied.
         run: python manage.py migrate --check
