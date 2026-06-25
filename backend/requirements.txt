@@ -27,5 +27,8 @@ pyhanko-certvalidator==0.26.*
 # ── Working-day calendar ──────────────────────────────────────────────────────
 holidays==0.46.*
 
+# ── File type detection (magic bytes, AC-19) ─────────────────────────────────
+python-magic==0.4.*
+
 # ── Email ─────────────────────────────────────────────────────────────────────
 # Resend SMTP — no extra package needed; Django's SMTP backend handles it

@@ -174,12 +174,16 @@ if R2_ACCOUNT_ID:
                 "secret_key": R2_SECRET_ACCESS_KEY,
                 "default_acl": None,
                 "querystring_auth": True,
+                "querystring_expire": 300,  # AC-21: 5-minute presign TTL
+                "file_overwrite": False,    # belt-and-suspenders alongside AC-20 app-level versioning
             },
         },
         "staticfiles": {
             "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
         },
     }
+
+DOCUMENT_MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB; per-slot overrides deferred to later phase
 
 # ── Email (Resend via SMTP) ───────────────────────────────────────────────────
 EMAIL_BACKEND = env(
