@@ -229,7 +229,9 @@ export default function Signup() {
 
         <div className="bg-white rounded-lg shadow-sm p-6">
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">{error}</p>
+            <p role="alert" className="text-sm text-red-600 bg-red-50 rounded px-3 py-2 mb-4">
+              {error}
+            </p>
           )}
 
           {/* Step 1: Account */}
@@ -237,8 +239,11 @@ export default function Signup() {
             <form onSubmit={handleAccount} className="space-y-4">
               <h2 className="font-semibold text-harbour mb-2">Account Details</h2>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">Full name</label>
+                <label htmlFor="full-name" className="block text-sm font-medium text-harbour mb-1">
+                  Full name
+                </label>
                 <input
+                  id="full-name"
                   type="text"
                   value={data.full_name}
                   onChange={(e) => set("full_name", e.target.value)}
@@ -248,8 +253,11 @@ export default function Signup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">Email</label>
+                <label htmlFor="signup-email" className="block text-sm font-medium text-harbour mb-1">
+                  Email
+                </label>
                 <input
+                  id="signup-email"
                   type="email"
                   value={data.email}
                   onChange={(e) => set("email", e.target.value)}
@@ -258,8 +266,11 @@ export default function Signup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">Username</label>
+                <label htmlFor="signup-username" className="block text-sm font-medium text-harbour mb-1">
+                  Username
+                </label>
                 <input
+                  id="signup-username"
                   type="text"
                   value={data.username}
                   onChange={(e) => set("username", e.target.value)}
@@ -268,8 +279,11 @@ export default function Signup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">Password</label>
+                <label htmlFor="signup-password" className="block text-sm font-medium text-harbour mb-1">
+                  Password
+                </label>
                 <input
+                  id="signup-password"
                   type="password"
                   value={data.password}
                   onChange={(e) => set("password", e.target.value)}
@@ -279,10 +293,11 @@ export default function Signup() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">
+                <label htmlFor="signup-aadhaar" className="block text-sm font-medium text-harbour mb-1">
                   Aadhaar number
                 </label>
                 <input
+                  id="signup-aadhaar"
                   type="text"
                   value={data.aadhaar}
                   onChange={(e) => set("aadhaar", e.target.value)}
@@ -311,14 +326,18 @@ export default function Signup() {
                 A 6-digit OTP has been sent to <strong>{data.email}</strong>.
               </p>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">OTP</label>
+                <label htmlFor="signup-otp" className="block text-sm font-medium text-harbour mb-1">
+                  OTP
+                </label>
                 <input
+                  id="signup-otp"
                   type="text"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   required
                   pattern="\d{6}"
                   inputMode="numeric"
+                  autoFocus
                   className={inputCls}
                   placeholder="000000"
                 />
@@ -350,8 +369,11 @@ export default function Signup() {
             <form onSubmit={handleApplication} className="space-y-4">
               <h2 className="font-semibold text-harbour mb-2">Application Details</h2>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">Stream</label>
+                <label htmlFor="signup-stream" className="block text-sm font-medium text-harbour mb-1">
+                  Stream
+                </label>
                 <select
+                  id="signup-stream"
                   value={data.stream_id}
                   onChange={(e) => set("stream_id", e.target.value)}
                   required
@@ -369,10 +391,11 @@ export default function Signup() {
                 )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">
+                <label htmlFor="signup-plpn" className="block text-sm font-medium text-harbour mb-1">
                   PLPN (optional)
                 </label>
                 <input
+                  id="signup-plpn"
                   type="text"
                   value={data.plpn}
                   onChange={(e) => set("plpn", e.target.value)}
@@ -382,10 +405,11 @@ export default function Signup() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label htmlFor="signup-plot" className="block text-sm font-medium text-harbour mb-1">
                     Plot area (sqm)
                   </label>
                   <input
+                    id="signup-plot"
                     type="number"
                     step="0.01"
                     min="0"
@@ -396,10 +420,11 @@ export default function Signup() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label htmlFor="signup-bua" className="block text-sm font-medium text-harbour mb-1">
                     Proposed BUA (sqm)
                   </label>
                   <input
+                    id="signup-bua"
                     type="number"
                     step="0.01"
                     min="0"
@@ -410,10 +435,11 @@ export default function Signup() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label htmlFor="signup-existing-bua" className="block text-sm font-medium text-harbour mb-1">
                     Existing BUA (sqm)
                   </label>
                   <input
+                    id="signup-existing-bua"
                     type="number"
                     step="0.01"
                     min="0"
@@ -424,10 +450,11 @@ export default function Signup() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label htmlFor="signup-rrr" className="block text-sm font-medium text-harbour mb-1">
                     Zonal RRR (₹/sqm)
                   </label>
                   <input
+                    id="signup-rrr"
                     type="number"
                     step="0.01"
                     min="0"

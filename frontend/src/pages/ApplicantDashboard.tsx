@@ -42,6 +42,13 @@ function MilestoneStrip({ milestones }: { milestones: StatusMilestoneItem[] }) {
       {milestones.map((m) => (
         <li key={m.code} className="flex items-start gap-3 text-sm">
           <span
+            aria-label={
+              m.status === "completed"
+                ? "Completed"
+                : m.status === "in_progress"
+                  ? "In progress"
+                  : "Pending"
+            }
             className={cn(
               "mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs",
               m.status === "completed" && "bg-teal text-white",
@@ -49,7 +56,7 @@ function MilestoneStrip({ milestones }: { milestones: StatusMilestoneItem[] }) {
               m.status === "pending" && "bg-paper-dark text-slate",
             )}
           >
-            {m.status === "completed" ? "✓" : m.sequence}
+            <span aria-hidden="true">{m.status === "completed" ? "✓" : m.sequence}</span>
           </span>
           <div className="flex-1">
             <span
@@ -212,10 +219,12 @@ function DetailPanel({ app }: DetailPanelProps) {
   return (
     <div className="border-t border-paper-dark">
       {/* Tab bar */}
-      <div className="flex border-b border-paper-dark">
+      <div role="tablist" className="flex border-b border-paper-dark">
         {tabs.map((t) => (
           <button
             key={t.key}
+            role="tab"
+            aria-selected={tab === t.key}
             onClick={() => setTab(t.key)}
             className={cn(
               "px-4 py-2 text-sm font-medium",
@@ -270,13 +279,17 @@ function DetailPanel({ app }: DetailPanelProps) {
                   <ul className="space-y-3">
                     {docSlots.map((slot) => (
                       <li key={slot.id} className="text-sm">
-                        <div className="flex items-center justify-between mb-1">
+                        <label
+                          htmlFor={`doc-slot-${slot.id}`}
+                          className="flex items-center justify-between mb-1"
+                        >
                           <span className="font-medium text-harbour">{slot.document_type}</span>
                           {slot.is_mandatory && (
-                            <span className="text-xs text-red-500">Required</span>
+                            <span className="text-xs text-red-500" aria-label="Required">Required</span>
                           )}
-                        </div>
+                        </label>
                         <input
+                          id={`doc-slot-${slot.id}`}
                           type="file"
                           disabled={uploadingSlot === slot.id}
                           onChange={(e) => {
@@ -363,31 +376,56 @@ function DetailPanel({ app }: DetailPanelProps) {
                     <p className="text-xs text-red-600 mb-2">{payError}</p>
                   )}
                   <form onSubmit={handlePaymentRecord} className="space-y-2">
+                    <div>
+                      <label
+                        htmlFor={`challan-${app.id}`}
+                        className="block text-xs font-medium text-harbour mb-0.5"
+                      >
+                        Challan reference
+                      </label>
+                      <input
+                        id={`challan-${app.id}`}
+                        type="text"
+                        value={payForm.challan_reference}
+                        onChange={(e) => setPayForm((f) => ({ ...f, challan_reference: e.target.value }))}
+                        required
+                        className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`amount-${app.id}`}
+                        className="block text-xs font-medium text-harbour mb-0.5"
+                      >
+                        Amount (₹)
+                      </label>
+                      <input
+                        id={`amount-${app.id}`}
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={payForm.claimed_amount}
+                        onChange={(e) => setPayForm((f) => ({ ...f, claimed_amount: e.target.value }))}
+                        required
+                        className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`paydate-${app.id}`}
+                        className="block text-xs font-medium text-harbour mb-0.5"
+                      >
+                        Payment date
+                      </label>
                     <input
-                      type="text"
-                      placeholder="Challan reference"
-                      value={payForm.challan_reference}
-                      onChange={(e) => setPayForm((f) => ({ ...f, challan_reference: e.target.value }))}
-                      required
-                      className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
-                    />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      placeholder="Amount (₹)"
-                      value={payForm.claimed_amount}
-                      onChange={(e) => setPayForm((f) => ({ ...f, claimed_amount: e.target.value }))}
-                      required
-                      className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
-                    />
-                    <input
+                      id={`paydate-${app.id}`}
                       type="date"
                       value={payForm.payment_date}
                       onChange={(e) => setPayForm((f) => ({ ...f, payment_date: e.target.value }))}
                       required
                       className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
                     />
+                    </div>
                     <button
                       type="submit"
                       disabled={paySubmitting}

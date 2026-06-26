@@ -123,10 +123,11 @@ export default function StreamPlanner() {
           <form onSubmit={handleEstimate} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">
+                <label htmlFor="est-bua" className="block text-sm font-medium text-harbour mb-1">
                   Proposed BUA (sqm)
                 </label>
                 <input
+                  id="est-bua"
                   type="number"
                   step="0.01"
                   min="0"
@@ -137,10 +138,11 @@ export default function StreamPlanner() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-harbour mb-1">
+                <label htmlFor="est-plot" className="block text-sm font-medium text-harbour mb-1">
                   Plot area (sqm)
                 </label>
                 <input
+                  id="est-plot"
                   type="number"
                   step="0.01"
                   min="0"
@@ -151,10 +153,11 @@ export default function StreamPlanner() {
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-sm font-medium text-harbour mb-1">
+                <label htmlFor="est-rrr" className="block text-sm font-medium text-harbour mb-1">
                   Zonal RRR (₹/sqm)
                 </label>
                 <input
+                  id="est-rrr"
                   type="number"
                   step="0.01"
                   min="0"
@@ -172,10 +175,14 @@ export default function StreamPlanner() {
               </summary>
               <div className="grid grid-cols-2 gap-4 mt-3">
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label
+                    htmlFor="est-open-space"
+                    className="block text-sm font-medium text-harbour mb-1"
+                  >
                     Open-space shortfall (sqm)
                   </label>
                   <input
+                    id="est-open-space"
                     type="number"
                     step="0.01"
                     min="0"
@@ -185,10 +192,14 @@ export default function StreamPlanner() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-harbour mb-1">
+                  <label
+                    htmlFor="est-parking"
+                    className="block text-sm font-medium text-harbour mb-1"
+                  >
                     Parking waiver (sqm)
                   </label>
                   <input
+                    id="est-parking"
                     type="number"
                     step="0.01"
                     min="0"
@@ -201,7 +212,9 @@ export default function StreamPlanner() {
             </details>
 
             {error && (
-              <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>
+              <p role="alert" className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">
+                {error}
+              </p>
             )}
 
             <button

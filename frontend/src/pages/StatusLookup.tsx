@@ -54,7 +54,11 @@ export default function StatusLookup() {
         <p className="text-slate text-sm mb-6">Track your building permission application.</p>
 
         <form onSubmit={handleSearch} className="flex gap-2">
+          <label htmlFor="app-number" className="sr-only">
+            Application number
+          </label>
           <input
+            id="app-number"
             type="text"
             placeholder="e.g. MBPASPA20260001"
             value={appNumber}
@@ -75,7 +79,9 @@ export default function StatusLookup() {
         </form>
 
         {error && (
-          <p className="mt-4 text-sm text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>
+          <p role="alert" className="mt-4 text-sm text-red-600 bg-red-50 rounded px-3 py-2">
+            {error}
+          </p>
         )}
 
         {result && (
@@ -108,6 +114,13 @@ export default function StatusLookup() {
                   {result.milestones.map((m) => (
                     <li key={m.code} className="flex items-start gap-3 text-sm">
                       <span
+                        aria-label={
+                          m.status === "completed"
+                            ? "Completed"
+                            : m.status === "in_progress"
+                              ? "In progress"
+                              : "Pending"
+                        }
                         className={cn(
                           "mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs",
                           m.status === "completed" && "bg-teal text-white",
@@ -115,7 +128,9 @@ export default function StatusLookup() {
                           m.status === "pending" && "bg-paper-dark text-slate",
                         )}
                       >
-                        {m.status === "completed" ? "✓" : m.sequence}
+                        <span aria-hidden="true">
+                          {m.status === "completed" ? "✓" : m.sequence}
+                        </span>
                       </span>
                       <div className="flex-1">
                         <span

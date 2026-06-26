@@ -112,8 +112,11 @@ function MilestoneActionPanel({
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-harbour mb-1">Action</label>
+        <label htmlFor="officer-action" className="block text-sm font-medium text-harbour mb-1">
+          Action
+        </label>
         <select
+          id="officer-action"
           value={action}
           onChange={(e) => setAction(e.target.value as ActionEnum)}
           className="w-full rounded border border-paper-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
@@ -126,10 +129,14 @@ function MilestoneActionPanel({
 
       {action === "return_for_correction" && (
         <div>
-          <label className="block text-sm font-medium text-harbour mb-1">
+          <label
+            htmlFor="correction-reason"
+            className="block text-sm font-medium text-harbour mb-1"
+          >
             Correction reason
           </label>
           <textarea
+            id="correction-reason"
             value={correctionReason}
             onChange={(e) => setCorrectionReason(e.target.value)}
             rows={2}
@@ -139,8 +146,11 @@ function MilestoneActionPanel({
       )}
 
       <div>
-        <label className="block text-sm font-medium text-harbour mb-1">Decision note</label>
+        <label htmlFor="decision-note" className="block text-sm font-medium text-harbour mb-1">
+          Decision note
+        </label>
         <textarea
+          id="decision-note"
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={3}
@@ -148,7 +158,11 @@ function MilestoneActionPanel({
         />
       </div>
 
-      {error && <p className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">{error}</p>}
+      {error && (
+        <p role="alert" className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">
+          {error}
+        </p>
+      )}
 
       <button
         type="submit"
@@ -191,9 +205,9 @@ function DocumentsPanel({ item }: { item: QueueItem }) {
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-left text-slate">
-            <th className="pb-2 pr-4 font-medium">Document type</th>
-            <th className="pb-2 pr-4 font-medium">Required</th>
-            <th className="pb-2 font-medium">Condition</th>
+            <th scope="col" className="pb-2 pr-4 font-medium">Document type</th>
+            <th scope="col" className="pb-2 pr-4 font-medium">Required</th>
+            <th scope="col" className="pb-2 font-medium">Condition</th>
           </tr>
         </thead>
         <tbody>
@@ -302,10 +316,12 @@ function FeesPanel({ item }: { item: QueueItem }) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-slate">
-                <th className="pb-1 pr-3 font-medium">Challan</th>
-                <th className="pb-1 pr-3 font-medium">Claimed</th>
-                <th className="pb-1 pr-3 font-medium">Status</th>
-                <th className="pb-1 font-medium"></th>
+                <th scope="col" className="pb-1 pr-3 font-medium">Challan</th>
+                <th scope="col" className="pb-1 pr-3 font-medium">Claimed</th>
+                <th scope="col" className="pb-1 pr-3 font-medium">Status</th>
+                <th scope="col" className="pb-1 font-medium">
+                  <span className="sr-only">Actions</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -348,8 +364,11 @@ function FeesPanel({ item }: { item: QueueItem }) {
         <form onSubmit={submitVerify} className="space-y-3 border-t pt-3">
           <h4 className="text-sm font-medium text-harbour">Verify Payment</h4>
           <div>
-            <label className="block text-sm font-medium text-harbour mb-1">Decision</label>
+            <label htmlFor="verify-decision" className="block text-sm font-medium text-harbour mb-1">
+              Decision
+            </label>
             <select
+              id="verify-decision"
               value={decision}
               onChange={(e) =>
                 setDecision(e.target.value as "verified" | "rejected" | "mismatch")
@@ -362,15 +381,22 @@ function FeesPanel({ item }: { item: QueueItem }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-harbour mb-1">Remarks</label>
+            <label htmlFor="verify-remarks" className="block text-sm font-medium text-harbour mb-1">
+              Remarks
+            </label>
             <input
+              id="verify-remarks"
               type="text"
               value={verifyRemarks}
               onChange={(e) => setVerifyRemarks(e.target.value)}
               className="w-full rounded border border-paper-dark px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-red-600">
+              {error}
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               type="submit"
@@ -603,6 +629,7 @@ export default function OfficerDashboard() {
                 <li key={item.id}>
                   <button
                     onClick={() => setSelected(item)}
+                    aria-pressed={selected?.id === item.id}
                     className={cn(
                       "w-full text-left px-4 py-3 border-b border-paper-dark hover:bg-paper transition-colors",
                       selected?.id === item.id && "bg-paper",
