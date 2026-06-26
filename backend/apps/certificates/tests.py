@@ -312,8 +312,8 @@ def test_receive_signed_certificate_ac25_integration():
         .issuer_name(issuer)
         .public_key(key.public_key())
         .serial_number(cx509.random_serial_number())
-        .not_valid_before(datetime.datetime.utcnow())
-        .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365))
         .add_extension(cx509.BasicConstraints(ca=True, path_length=None), critical=True)
         .add_extension(
             cx509.KeyUsage(
