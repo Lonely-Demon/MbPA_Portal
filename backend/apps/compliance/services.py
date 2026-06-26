@@ -5,8 +5,12 @@ from datetime import timedelta
 from typing import Any
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.utils import timezone
 
-from .models import AuditEvent
+from apps.common.exceptions import DomainError
+
+from .models import AuditEvent, Complaint, ConditionalClearance
 
 User = get_user_model()
 
@@ -65,3 +69,142 @@ def record_audit_event(
         ip_address=ip_address,
         user_agent=user_agent,
     )
+
+
+# ── AC-28 invariant helper ────────────────────────────────────────────────────
+
+
+def _validate_complaint_raised_by(origin: str, raised_by: Any) -> None:
+    """Enforce AC-28: raised_by is None iff origin == ORIGIN_SYSTEM."""
+    if origin == Complaint.ORIGIN_APPLICANT and raised_by is None:
+        raise DomainError("Applicant-raised complaints require a raised_by user (AC-28).")
+    if origin == Complaint.ORIGIN_SYSTEM and raised_by is not None:
+        raise DomainError("System-raised complaints must have raised_by=None (AC-28).")
+
+
+# ── Complaint services ────────────────────────────────────────────────────────
+
+
+@transaction.atomic
+def raise_applicant_complaint(*, application, raised_by, subject: str, body: str) -> Complaint:
+    _validate_complaint_raised_by(Complaint.ORIGIN_APPLICANT, raised_by)
+    complaint = Complaint.objects.create(
+        application=application,
+        origin=Complaint.ORIGIN_APPLICANT,
+        raised_by=raised_by,
+        subject=subject,
+        body=body,
+    )
+    record_audit_event(
+        verb="complaint.raised",
+        target_type="Complaint",
+        target_id=complaint.pk,
+        actor=raised_by,
+        payload={
+            "origin": Complaint.ORIGIN_APPLICANT,
+            "subject": subject,
+            "application": application.application_number,
+        },
+    )
+    return complaint
+
+
+@transaction.atomic
+def raise_system_complaint(*, application, subject: str, body: str) -> Complaint:
+    _validate_complaint_raised_by(Complaint.ORIGIN_SYSTEM, None)
+    complaint = Complaint.objects.create(
+        application=application,
+        origin=Complaint.ORIGIN_SYSTEM,
+        raised_by=None,
+        subject=subject,
+        body=body,
+    )
+    record_audit_event(
+        verb="complaint.raised_by_system",
+        target_type="Complaint",
+        target_id=complaint.pk,
+        payload={
+            "origin": Complaint.ORIGIN_SYSTEM,
+            "subject": subject,
+            "application": application.application_number,
+        },
+    )
+    return complaint
+
+
+@transaction.atomic
+def resolve_complaint(*, complaint: Complaint, resolved_by, resolution_notes: str) -> Complaint:
+    if complaint.status == Complaint.STATUS_RESOLVED:
+        raise DomainError("Complaint is already resolved.")
+    complaint.status = Complaint.STATUS_RESOLVED
+    complaint.resolution_notes = resolution_notes
+    complaint.resolved_at = timezone.now()
+    complaint.save(update_fields=["status", "resolution_notes", "resolved_at"])
+    record_audit_event(
+        verb="complaint.resolved",
+        target_type="Complaint",
+        target_id=complaint.pk,
+        actor=resolved_by,
+        payload={"resolution_notes": resolution_notes},
+    )
+    return complaint
+
+
+# ── ConditionalClearance services ─────────────────────────────────────────────
+
+
+@transaction.atomic
+def create_conditional_clearance(
+    *,
+    application,
+    milestone_instance,
+    clearance_type: str,
+    description: str,
+    trigger_metadata: dict,
+    created_by,
+) -> ConditionalClearance:
+    clearance = ConditionalClearance.objects.create(
+        application=application,
+        milestone_instance=milestone_instance,
+        clearance_type=clearance_type,
+        description=description,
+        trigger_metadata=trigger_metadata,
+    )
+    record_audit_event(
+        verb="clearance.created",
+        target_type="ConditionalClearance",
+        target_id=clearance.pk,
+        actor=created_by,
+        payload={
+            "clearance_type": clearance_type,
+            "application": application.application_number,
+        },
+    )
+    return clearance
+
+
+@transaction.atomic
+def fulfill_clearance(
+    *, clearance: ConditionalClearance, clearance_doc, fulfilled_by
+) -> ConditionalClearance:
+    if clearance.is_fulfilled:
+        raise DomainError("Clearance is already fulfilled.")
+    clearance.is_fulfilled = True
+    clearance.fulfilled_at = timezone.now()
+    clearance.fulfilled_by = fulfilled_by
+    clearance.clearance_doc = clearance_doc
+    clearance.save(
+        update_fields=["is_fulfilled", "fulfilled_at", "fulfilled_by_id", "clearance_doc_id"]
+    )
+    record_audit_event(
+        verb="clearance.fulfilled",
+        target_type="ConditionalClearance",
+        target_id=clearance.pk,
+        actor=fulfilled_by,
+        payload={
+            "clearance_type": clearance.clearance_type,
+            "clearance_doc_id": clearance_doc.pk,
+            "application": clearance.application.application_number,
+        },
+    )
+    return clearance

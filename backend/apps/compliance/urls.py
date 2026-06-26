@@ -17,4 +17,14 @@ urlpatterns = [
         views.ConditionalClearanceListView.as_view(),
         name="clearance-list",
     ),
+    path(
+        "clearances/<str:application_number>/create/",
+        views.ConditionalClearanceCreateView.as_view(),
+        name="clearance-create",
+    ),
+    path(
+        "clearances/<int:pk>/fulfill/",
+        views.ConditionalClearanceFulfillView.as_view(),
+        name="clearance-fulfill",
+    ),
 ]

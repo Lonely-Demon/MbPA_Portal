@@ -23,7 +23,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.applications.models import MilestoneInstance
-from apps.compliance.services import record_audit_event
+from apps.compliance.services import raise_system_complaint, record_audit_event
 
 logger = logging.getLogger("apps")
 
@@ -82,6 +82,15 @@ class Command(BaseCommand):
                             "due_at": instance.due_at.isoformat(),
                             "cleared_at": now.isoformat(),
                         },
+                    )
+                    raise_system_complaint(
+                        application=instance.application,
+                        subject=f"Milestone {milestone_code} auto-cleared after SLA breach",
+                        body=(
+                            f"MilestoneInstance (pk={instance.pk}) for application "
+                            f"{instance.application.application_number} was deemed-cleared "
+                            f"on {now.date()} after SLA due date passed without officer action."
+                        ),
                     )
                 cleared += 1
             except Exception as exc:

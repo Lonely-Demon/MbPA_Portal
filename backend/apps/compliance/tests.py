@@ -392,3 +392,238 @@ def test_seed_reference_data_stream_sequences_are_contiguous():
             f"Stream {stream.code!r} has non-contiguous sequences: "
             f"{sequences} (expected {expected})"
         )
+
+
+# ── Phase 8 — Complaint & ConditionalClearance ────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_raise_applicant_complaint_requires_raised_by():
+    """AC-28 direction 1: applicant-origin complaint with raised_by=None must be rejected."""
+    from apps.common.exceptions import DomainError
+    from apps.compliance.services import raise_applicant_complaint
+
+    user = _make_user("officer_p8a")
+    stream = _make_stream("P8A")
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269001",
+    )
+    with pytest.raises(DomainError, match="AC-28"):
+        raise_applicant_complaint(
+            application=app,
+            raised_by=None,
+            subject="Test complaint",
+            body="Test body",
+        )
+
+
+@pytest.mark.django_db
+def test_raise_system_complaint_rejects_raised_by_set():
+    """AC-28 direction 2: system-origin with a non-null actor must be rejected.
+
+    Tests the helper directly — catches the future violation where a caller passes
+    a default actor without checking origin first.
+    """
+    from apps.common.exceptions import DomainError
+    from apps.compliance.models import Complaint
+    from apps.compliance.services import _validate_complaint_raised_by
+
+    user = _make_user("officer_p8b")
+    with pytest.raises(DomainError, match="AC-28"):
+        _validate_complaint_raised_by(Complaint.ORIGIN_SYSTEM, user)
+
+
+@pytest.mark.django_db
+def test_resolve_complaint_sets_status_and_notes():
+    """resolve_complaint transitions status to RESOLVED and persists resolution_notes."""
+    from apps.compliance.models import Complaint
+    from apps.compliance.services import raise_applicant_complaint, resolve_complaint
+
+    user = _make_user("officer_p8c")
+    stream = _make_stream("P8C")
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269002",
+    )
+    complaint = raise_applicant_complaint(
+        application=app,
+        raised_by=user,
+        subject="Slow review",
+        body="Application not reviewed in 30 days.",
+    )
+    assert complaint.status == Complaint.STATUS_OPEN
+
+    updated = resolve_complaint(
+        complaint=complaint,
+        resolved_by=user,
+        resolution_notes="Reviewed and resolved by officer.",
+    )
+    assert updated.status == Complaint.STATUS_RESOLVED
+    assert updated.resolution_notes == "Reviewed and resolved by officer."
+    assert updated.resolved_at is not None
+
+    updated.refresh_from_db()
+    assert updated.status == Complaint.STATUS_RESOLVED
+
+
+@pytest.mark.django_db(transaction=True)
+def test_run_sla_sweep_creates_complaint_on_deemed_clearance():
+    """The SLA sweep must create a system-raised Complaint when it deems a milestone cleared."""
+    from apps.compliance.models import Complaint
+
+    user = _make_user("officer_p8d")
+    stream = _make_stream("P8D")
+    milestone = _make_milestone("S2P8D")
+
+    sm = StreamMilestone.objects.create(
+        stream=stream,
+        milestone=milestone,
+        sequence=1,
+        deemed_clearance_eligible=True,
+    )
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269003",
+    )
+    now = timezone.now()
+    MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=now - timedelta(days=30),
+        due_at=now - timedelta(days=5),
+    )
+
+    call_command("run_sla_sweep", verbosity=0)
+
+    complaints = Complaint.objects.filter(application=app, origin=Complaint.ORIGIN_SYSTEM)
+    assert complaints.count() == 1
+    complaint = complaints.first()
+    assert "auto-cleared" in complaint.subject
+    assert complaint.raised_by is None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_run_sla_sweep_complaint_rolls_back_with_deemed_clearance():
+    """If raise_system_complaint fails inside the atomic block, the entire transaction
+    for that instance rolls back — no MilestoneInstance update, no AuditEvent."""
+    from unittest.mock import patch
+
+    user = _make_user("officer_p8e")
+    stream = _make_stream("P8E")
+    milestone = _make_milestone("S2P8E")
+
+    sm = StreamMilestone.objects.create(
+        stream=stream,
+        milestone=milestone,
+        sequence=1,
+        deemed_clearance_eligible=True,
+    )
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269004",
+    )
+    now = timezone.now()
+    instance = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=now - timedelta(days=30),
+        due_at=now - timedelta(days=5),
+    )
+
+    with patch(
+        "apps.compliance.management.commands.run_sla_sweep.raise_system_complaint",
+        side_effect=Exception("forced failure to test rollback"),
+    ):
+        call_command("run_sla_sweep", verbosity=0)
+
+    instance.refresh_from_db()
+    assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS, (
+        "MilestoneInstance was deemed-cleared despite raise_system_complaint failing — "
+        "transaction rollback did not work"
+    )
+    assert not instance.is_deemed
+    assert instance.completed_at is None
+    assert not AuditEvent.objects.filter(
+        target_type="MilestoneInstance", target_id=instance.pk
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_clearance_type_choices_cover_prd_authorities():
+    """TYPE_CHOICES must cover all five PRD §2.3/§6.6 clearance authorities."""
+    from apps.compliance.models import ConditionalClearance
+
+    choice_values = {value for value, _ in ConditionalClearance.TYPE_CHOICES}
+    expected = {
+        ConditionalClearance.TYPE_RAILWAY,
+        ConditionalClearance.TYPE_CRZ,
+        ConditionalClearance.TYPE_HERITAGE_MHCC,
+        ConditionalClearance.TYPE_AVIATION_AAI,
+        ConditionalClearance.TYPE_POLLUTION_MPCB,
+    }
+    assert expected == choice_values, (
+        f"TYPE_CHOICES mismatch. Missing: {expected - choice_values}; "
+        f"Extra: {choice_values - expected}"
+    )
+
+
+@pytest.mark.django_db
+def test_fulfill_clearance_records_doc_evidence():
+    """fulfill_clearance attaches the evidence document and marks the clearance fulfilled."""
+    from apps.compliance.models import ConditionalClearance
+    from apps.compliance.services import create_conditional_clearance, fulfill_clearance
+    from apps.documents.models import DocumentUpload
+
+    user = _make_user("officer_p8f")
+    stream = _make_stream("P8F")
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=user,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269005",
+    )
+
+    clearance = create_conditional_clearance(
+        application=app,
+        milestone_instance=None,
+        clearance_type=ConditionalClearance.TYPE_RAILWAY,
+        description="Railway NOC required for plot adjacent to track.",
+        trigger_metadata={"agency": "Central Railway"},
+        created_by=user,
+    )
+    assert not clearance.is_fulfilled
+    assert clearance.clearance_doc is None
+
+    doc = DocumentUpload.objects.create(
+        application=app,
+        uploaded_by=user,
+        r2_object_key="clearances/railway_noc.pdf",
+        original_filename="railway_noc.pdf",
+        content_type="application/pdf",
+        size_bytes=12345,
+    )
+
+    updated = fulfill_clearance(
+        clearance=clearance,
+        clearance_doc=doc,
+        fulfilled_by=user,
+    )
+    assert updated.is_fulfilled
+    assert updated.clearance_doc_id == doc.pk
+    assert updated.fulfilled_by_id == user.pk
+    assert updated.fulfilled_at is not None
+
+    updated.refresh_from_db()
+    assert updated.is_fulfilled
+    assert updated.clearance_doc_id == doc.pk

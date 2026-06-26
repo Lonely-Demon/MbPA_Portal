@@ -8,19 +8,18 @@ from apps.applications.models import Application, MilestoneInstance
 class ConditionalClearance(models.Model):
     """Conditions attached to a clearance grant that must be fulfilled."""
 
-    TYPE_NOC = "noc"
-    TYPE_STRUCTURAL = "structural"
-    TYPE_FIRE = "fire"
-    TYPE_ENVIRONMENT = "environment"
-    TYPE_HERITAGE = "heritage"
-    TYPE_OTHER = "other"
+    # PRD §2.3, §6.6 — five named clearance authorities from the 7-question NOC wizard.
+    TYPE_RAILWAY = "railway"  # Railway Authority NOC
+    TYPE_CRZ = "crz"  # CRZ / MCZMA Coastal Regulation Zone
+    TYPE_HERITAGE_MHCC = "heritage_mhcc"  # MHCC Heritage Clearance
+    TYPE_AVIATION_AAI = "aviation_aai"  # AAI / Aviation Clearance
+    TYPE_POLLUTION_MPCB = "pollution_mpcb"  # MPCB Pollution Control Clearance
     TYPE_CHOICES = [
-        (TYPE_NOC, "No-Objection Certificate"),
-        (TYPE_STRUCTURAL, "Structural Stability"),
-        (TYPE_FIRE, "Fire Safety"),
-        (TYPE_ENVIRONMENT, "Environmental Clearance"),
-        (TYPE_HERITAGE, "Heritage Clearance"),
-        (TYPE_OTHER, "Other"),
+        (TYPE_RAILWAY, "Railway Authority NOC"),
+        (TYPE_CRZ, "CRZ / MCZMA Coastal Clearance"),
+        (TYPE_HERITAGE_MHCC, "MHCC Heritage Clearance"),
+        (TYPE_AVIATION_AAI, "AAI / Aviation Clearance"),
+        (TYPE_POLLUTION_MPCB, "MPCB Pollution Control Clearance"),
     ]
 
     application = models.ForeignKey(
@@ -37,6 +36,15 @@ class ConditionalClearance(models.Model):
     description = models.TextField()
     # Structured metadata (agency name, reference number, expiry, etc.)
     trigger_metadata = models.JSONField(default=dict)
+    # Evidence document attached when the clearance is fulfilled.
+    # Nullable until fulfilled; required by fulfill_clearance() at service level.
+    clearance_doc = models.ForeignKey(
+        "documents.DocumentUpload",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="clearance_evidence",
+    )
     is_fulfilled = models.BooleanField(default=False)
     fulfilled_at = models.DateTimeField(null=True, blank=True)
     fulfilled_by = models.ForeignKey(
