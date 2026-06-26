@@ -688,3 +688,123 @@ def test_sla_sweep_against_seeded_reference_data():
     assert oc_instance.status == MilestoneInstance.STATUS_IN_PROGRESS, (
         f"OC instance was incorrectly auto-deemed (status: {oc_instance.status!r})"
     )
+
+
+# ── OfficerQueueView HTTP endpoint (Phase 9) ──────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_officer_queue_returns_only_assigned_in_progress():
+    """
+    GET /api/officer/queue/ returns only IN_PROGRESS milestones assigned to the
+    requesting officer; milestones of another officer are not returned.
+    """
+    from rest_framework.test import APIClient
+
+    officer1 = _make_officer("http_oq_officer1")
+    officer2 = _make_officer("http_oq_officer2")
+    user = _make_user("http_oq_owner1")
+    stream = _make_stream("http_oq_stream1")
+    ms1 = _make_milestone("HTOQ_S1", sla_days=5)
+    ms2 = _make_milestone("HTOQ_S2", sla_days=5)
+    sm1 = _make_stream_milestone(stream, ms1, sequence=1)
+    sm2 = _make_stream_milestone(stream, ms2, sequence=2)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    inst1 = MilestoneInstance.objects.get(application=app, stream_milestone=sm1)
+    inst1.assigned_officer = officer1
+    inst1.save(update_fields=["assigned_officer"])
+
+    # Second in-progress milestone for officer1
+    inst2 = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm2,
+        assigned_officer=officer1,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=inst1.started_at,
+        due_at=inst1.due_at,
+    )
+
+    # Third milestone belonging to officer2
+    stream2 = _make_stream("http_oq_stream2")
+    ms3 = _make_milestone("HTOQ_S3", sla_days=5)
+    sm3 = _make_stream_milestone(stream2, ms3, sequence=1)
+    app2 = create_application(stream_id=stream2.pk, submitted_by=user)
+    submit_application(application_id=app2.pk, submitted_by=user)
+    inst3 = MilestoneInstance.objects.get(application=app2, stream_milestone=sm3)
+    inst3.assigned_officer = officer2
+    inst3.save(update_fields=["assigned_officer"])
+
+    client = APIClient()
+    client.force_authenticate(user=officer1)
+    response = client.get("/api/officer/queue/")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
+    ids = {item["id"] for item in data}
+    assert inst1.pk in ids
+    assert inst2.pk in ids
+    assert inst3.pk not in ids
+
+
+@pytest.mark.django_db
+def test_officer_queue_includes_document_count():
+    """document_count in queue response reflects non-deleted documents only."""
+    from apps.documents.models import DocumentUpload
+    from rest_framework.test import APIClient
+
+    officer = _make_officer("dc_oq_officer1")
+    user = _make_user("dc_oq_owner1")
+    stream = _make_stream("dc_oq_stream1")
+    ms = _make_milestone("DCOQ_S1", sla_days=5)
+    sm = _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app, stream_milestone=sm)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    # 2 active + 1 soft-deleted — only active count should appear
+    for i in range(2):
+        DocumentUpload.objects.create(
+            application=app,
+            uploaded_by=user,
+            original_filename=f"doc{i}.pdf",
+            r2_object_key=f"uploads/doc{i}.pdf",
+            content_type="application/pdf",
+            size_bytes=1024,
+            is_deleted=False,
+        )
+    DocumentUpload.objects.create(
+        application=app,
+        uploaded_by=user,
+        original_filename="deleted.pdf",
+        r2_object_key="uploads/deleted.pdf",
+        content_type="application/pdf",
+        size_bytes=1024,
+        is_deleted=True,
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=officer)
+    response = client.get("/api/officer/queue/")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["document_count"] == 2
+
+
+@pytest.mark.django_db
+def test_officer_queue_requires_auth():
+    """Unauthenticated GET /api/officer/queue/ returns 403."""
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    response = client.get("/api/officer/queue/")
+    assert response.status_code == 403

@@ -19,10 +19,10 @@ class DocumentSlotReadSerializer(serializers.ModelSerializer):
             "applies_when",
         ]
 
-    def get_stream_code(self, obj):
+    def get_stream_code(self, obj) -> str:
         return obj.stream_milestone.stream.code
 
-    def get_milestone_code(self, obj):
+    def get_milestone_code(self, obj) -> str:
         return obj.stream_milestone.milestone.code
 
 
@@ -51,5 +51,5 @@ class DocumentUploadReadSerializer(serializers.ModelSerializer):
             "presigned_url",
         ]
 
-    def get_presigned_url(self, obj):
+    def get_presigned_url(self, obj) -> str:
         return get_download_url(obj)

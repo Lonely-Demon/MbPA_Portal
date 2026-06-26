@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -27,6 +28,13 @@ def _get_application(kwargs):
         return None
 
 
+@extend_schema_view(
+    get=extend_schema(responses=FeeAssessmentReadSerializer),
+    post=extend_schema(
+        request={},
+        responses={200: FeeAssessmentReadSerializer, 201: FeeAssessmentReadSerializer},
+    ),
+)
 class FeeAssessmentView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -71,6 +79,7 @@ class FeeAssessmentView(APIView):
 class PaymentListView(APIView):
     permission_classes = [IsAuthenticated, CanViewFees]
 
+    @extend_schema(responses=PaymentReadSerializer(many=True))
     def get(self, request, application_number):
         app = _get_application({"application_number": application_number})
         if app is None:
@@ -85,6 +94,7 @@ class PaymentListView(APIView):
 class PaymentRecordView(APIView):
     permission_classes = [IsAuthenticated, CanViewFees]
 
+    @extend_schema(request=PaymentRecordSerializer, responses={201: PaymentReadSerializer})
     def post(self, request, application_number):
         app = _get_application({"application_number": application_number})
         if app is None:
@@ -109,6 +119,7 @@ class PaymentRecordView(APIView):
 class PaymentVerifyView(APIView):
     permission_classes = [IsAuthenticated, IsOfficerForApplication]
 
+    @extend_schema(request=PaymentVerifySerializer, responses=PaymentReadSerializer)
     def patch(self, request, application_number, pk):
         app = _get_application({"application_number": application_number})
         if app is None:

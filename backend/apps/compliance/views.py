@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -25,14 +26,9 @@ from apps.documents.models import DocumentUpload
 
 
 class AuditEventListView(APIView):
-    """
-    GET /audit/<target_type>/<target_id>/
-    Returns all audit events for the given target, newest first.
-    Permission: officer or admin (any authenticated user — access is by target scope).
-    """
-
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=AuditEventSerializer(many=True))
     def get(self, request, target_type, target_id):
         events = (
             AuditEvent.objects.filter(target_type=target_type, target_id=target_id)
@@ -43,22 +39,13 @@ class AuditEventListView(APIView):
 
 
 class ComplaintListCreateView(APIView):
-    """
-    GET  /complaints/ — list complaints visible to the requesting user.
-    POST /complaints/ — applicant raises a complaint against their own application.
-
-    Visibility: applicant sees complaints they raised; officers see all complaints
-    on applications where they are an assigned milestone officer.
-    """
-
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(operation_id="complaints_list", responses=ComplaintReadSerializer(many=True))
     def get(self, request):
         from apps.applications.models import ApplicationParty
 
         user = request.user
-        # Applicant: complaints they personally raised.
-        # Officer: complaints on applications where they're assigned to any milestone.
         if ApplicationParty.objects.filter(user=user).exists():
             qs = Complaint.objects.filter(raised_by=user)
         else:
@@ -70,6 +57,7 @@ class ComplaintListCreateView(APIView):
         qs = qs.select_related("application", "raised_by").order_by("-created_at")
         return Response(ComplaintReadSerializer(qs, many=True).data)
 
+    @extend_schema(request=ComplaintCreateSerializer, responses={201: ComplaintReadSerializer})
     def post(self, request):
         ser = ComplaintCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -93,11 +81,6 @@ class ComplaintListCreateView(APIView):
 
 
 class ComplaintDetailView(APIView):
-    """
-    GET   /complaints/<pk>/ — retrieve one complaint.
-    PATCH /complaints/<pk>/ — officer resolves the complaint (sets STATUS_RESOLVED).
-    """
-
     permission_classes = [IsAuthenticated]
 
     def _get_complaint(self, pk):
@@ -106,12 +89,14 @@ class ComplaintDetailView(APIView):
         except Complaint.DoesNotExist:
             return None
 
+    @extend_schema(operation_id="complaints_retrieve", responses=ComplaintReadSerializer)
     def get(self, request, pk):
         complaint = self._get_complaint(pk)
         if complaint is None:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ComplaintReadSerializer(complaint).data)
 
+    @extend_schema(request=ComplaintResolveSerializer, responses=ComplaintReadSerializer)
     def patch(self, request, pk):
         complaint = self._get_complaint(pk)
         if complaint is None:
@@ -133,14 +118,9 @@ class ComplaintDetailView(APIView):
 
 
 class ConditionalClearanceListView(APIView):
-    """
-    GET /clearances/<application_number>/
-    Lists all conditional clearances for an application.
-    Permission: authenticated applicant party or assigned officer.
-    """
-
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=ConditionalClearanceReadSerializer(many=True))
     def get(self, request, application_number):
         try:
             app = Application.objects.get(application_number=application_number)
@@ -156,14 +136,12 @@ class ConditionalClearanceListView(APIView):
 
 
 class ConditionalClearanceCreateView(APIView):
-    """
-    POST /clearances/<application_number>/create/
-    Officer attaches a conditional clearance requirement to an application.
-    Permission: authenticated assigned officer.
-    """
-
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ConditionalClearanceCreateSerializer,
+        responses={201: ConditionalClearanceReadSerializer},
+    )
     def post(self, request, application_number):
         try:
             app = Application.objects.get(application_number=application_number)
@@ -198,14 +176,12 @@ class ConditionalClearanceCreateView(APIView):
 
 
 class ConditionalClearanceFulfillView(APIView):
-    """
-    PATCH /clearances/<pk>/fulfill/
-    Officer marks a clearance as fulfilled, attaching the evidence document.
-    Permission: authenticated assigned officer.
-    """
-
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request=ConditionalClearanceFulfillSerializer,
+        responses=ConditionalClearanceReadSerializer,
+    )
     def patch(self, request, pk):
         try:
             clearance = ConditionalClearance.objects.select_related("application").get(pk=pk)

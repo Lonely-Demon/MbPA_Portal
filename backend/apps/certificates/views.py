@@ -1,4 +1,5 @@
 from django.core.files.storage import default_storage
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -35,6 +36,7 @@ class _CertificateSerializer(serializers.ModelSerializer):
 class CertificateListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=_CertificateSerializer(many=True))
     def get(self, request, application_number):
         app = _get_application(application_number)
         if app is None:
@@ -46,6 +48,9 @@ class CertificateListView(APIView):
 class CertificateDownloadView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        responses={200: inline_serializer("DownloadUrlResponse", {"url": serializers.URLField()})}
+    )
     def get(self, request, application_number, pk):
         app = _get_application(application_number)
         if app is None:
@@ -61,6 +66,14 @@ class CertificateDownloadView(APIView):
 class CertificateReceiveSignedView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request={
+            "multipart/form-data": inline_serializer(
+                "SignedPdfUpload", {"signed_pdf": serializers.FileField()}
+            )
+        },
+        responses={200: _CertificateSerializer, 422: None},
+    )
     def post(self, request, application_number, pk):
         app = _get_application(application_number)
         if app is None:

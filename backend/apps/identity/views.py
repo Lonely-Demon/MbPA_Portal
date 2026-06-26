@@ -1,6 +1,8 @@
 from django.contrib.auth import authenticate, logout
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -24,6 +26,17 @@ class SignupView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = "signup"
 
+    @extend_schema(
+        request=SignupSerializer,
+        responses={
+            201: inline_serializer(
+                "SignupResponse",
+                {
+                    "token_id": drf_serializers.IntegerField(),
+                },
+            )
+        },
+    )
     def post(self, request):
         ser = SignupSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -42,6 +55,18 @@ class LoginView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = "login"
 
+    @extend_schema(
+        request=LoginRequestSerializer,
+        responses={
+            200: inline_serializer(
+                "LoginResponse",
+                {
+                    "token_id": drf_serializers.IntegerField(),
+                    "masked_email": drf_serializers.CharField(),
+                },
+            )
+        },
+    )
     def post(self, request):
         ser = LoginRequestSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -78,6 +103,17 @@ class OtpVerifyView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = "otp"
 
+    @extend_schema(
+        request=OtpVerifySerializer,
+        responses={
+            200: inline_serializer(
+                "OtpVerifyResponse",
+                {
+                    "status": drf_serializers.CharField(),
+                },
+            )
+        },
+    )
     def post(self, request):
         ser = OtpVerifySerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -98,6 +134,17 @@ class OtpResendView(APIView):
     permission_classes = [AllowAny]
     throttle_scope = "otp_resend"
 
+    @extend_schema(
+        request=OtpResendSerializer,
+        responses={
+            200: inline_serializer(
+                "OtpResendResponse",
+                {
+                    "token_id": drf_serializers.IntegerField(),
+                },
+            )
+        },
+    )
     def post(self, request):
         ser = OtpResendSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -115,12 +162,30 @@ class OtpResendView(APIView):
         return Response({"token_id": new_token.pk})
 
 
+@extend_schema_view(
+    post=extend_schema(
+        request={},
+        responses={
+            200: inline_serializer(
+                "LogoutResponse",
+                {
+                    "status": drf_serializers.CharField(),
+                },
+            )
+        },
+    )
+)
 class LogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         logout(request)
         return Response({"status": "ok"})
 
 
 class MeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(responses=MeSerializer)
     def get(self, request):
         return Response(MeSerializer(request.user).data)

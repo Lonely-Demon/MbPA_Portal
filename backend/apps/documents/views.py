@@ -1,3 +1,5 @@
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -17,6 +19,7 @@ from apps.documents.services import get_download_url, upload_document
 class DocumentSlotListView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(responses=DocumentSlotReadSerializer(many=True))
     def get(self, request, milestone_instance_id):
         try:
             mi = MilestoneInstance.objects.select_related("stream_milestone").get(
@@ -34,6 +37,10 @@ class DocumentSlotListView(APIView):
 class DocumentUploadView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        request={"multipart/form-data": DocumentUploadCreateSerializer},
+        responses={201: DocumentUploadReadSerializer},
+    )
     def post(self, request):
         ser = DocumentUploadCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -85,6 +92,7 @@ class DocumentUploadView(APIView):
 class DocumentDetailView(APIView):
     permission_classes = [IsAuthenticated, CanAccessDocument]
 
+    @extend_schema(responses=DocumentUploadReadSerializer)
     def get(self, request, pk):
         try:
             doc = DocumentUpload.objects.select_related("application").get(pk=pk, is_deleted=False)
@@ -97,6 +105,11 @@ class DocumentDetailView(APIView):
 class PresignedUrlView(APIView):
     permission_classes = [IsAuthenticated, CanAccessDocument]
 
+    @extend_schema(
+        responses={
+            200: inline_serializer("PresignedUrlResponse", {"url": drf_serializers.URLField()})
+        }
+    )
     def get(self, request, pk):
         try:
             doc = DocumentUpload.objects.select_related("application").get(pk=pk, is_deleted=False)
