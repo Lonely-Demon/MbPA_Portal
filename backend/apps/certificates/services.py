@@ -146,12 +146,13 @@ def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: by
     AC-25: validate the DSC signature on a returned PDF against the CCA trust root.
     Sets signature_verified=True and records dsc_serial_used only on a genuine pass.
     """
+    from asn1crypto import x509 as asn1_x509
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.validation import validate_pdf_signature
     from pyhanko_certvalidator import ValidationContext
 
     reader = PdfFileReader(io.BytesIO(signed_pdf_bytes))
-    sigs = reader.embedded_regular_sigs
+    sigs = reader.embedded_regular_signatures
     if not sigs:
         raise DomainError("No embedded DSC signature found in the submitted PDF (AC-25).")
 
@@ -162,7 +163,8 @@ def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: by
     except OSError as exc:
         raise DomainError(f"DSC trust root not found at {trust_root_path}: {exc}") from exc
 
-    vc = ValidationContext(trust_roots=[root_der])
+    root_cert = asn1_x509.Certificate.load(root_der)
+    vc = ValidationContext(trust_roots=[root_cert])
     sig = sigs[0]
     status = validate_pdf_signature(sig, vc)
 
@@ -205,20 +207,31 @@ def compile_final_dossier(*, application, triggered_by) -> str:
     documents = application.documents.filter(is_deleted=False)
     certificates = application.certificates.filter(revoked_at__isnull=True)
 
+    expected_count = documents.count() + certificates.count()
+    items_added = 0
+
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for doc in documents:
             try:
                 content = default_storage.open(doc.r2_object_key).read()
                 zf.writestr(f"documents/{doc.original_filename}", content)
+                items_added += 1
             except Exception:
                 logger.warning("Dossier: skipping missing document object %s", doc.r2_object_key)
         for cert in certificates:
             try:
                 content = default_storage.open(cert.r2_object_key).read()
                 zf.writestr(f"certificates/{cert.certificate_number}.pdf", content)
+                items_added += 1
             except Exception:
                 logger.warning("Dossier: skipping missing cert object %s", cert.r2_object_key)
+
+    if expected_count > 0 and items_added == 0:
+        raise DomainError(
+            f"Dossier compilation aborted: 0 of {expected_count} expected items could be read "
+            "from storage. Check bucket credentials and configuration."
+        )
 
     zip_key = store_object(
         prefix="dossiers",
