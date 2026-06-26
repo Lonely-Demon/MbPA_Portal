@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/applications/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["applications_list"];
+        put?: never;
+        post: operations["applications_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications/{application_number}/milestones/": {
         parameters: {
             query?: never;
@@ -30,6 +46,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["applications_milestones_action_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["applications_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{id}/submit/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["applications_submit_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/status/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["applications_status_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/streams/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["applications_streams_list"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -325,6 +405,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/fees/estimate/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["fees_estimate_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/healthz/": {
         parameters: {
             query?: never;
@@ -464,6 +560,52 @@ export interface components {
          * @enum {string}
          */
         ActionEnum: "approve" | "reject" | "return_for_correction";
+        ApplicationCreateRequest: {
+            stream_id: number;
+            /** @default  */
+            plpn: string;
+            /** Format: decimal */
+            plot_area_sqm: string;
+            /** Format: decimal */
+            proposed_bua_sqm: string;
+            /** Format: decimal */
+            existing_bua_sqm: string;
+            /** Format: decimal */
+            zonal_rrr: string;
+        };
+        ApplicationRead: {
+            readonly id: number;
+            readonly application_number: string;
+            readonly stream_code: string;
+            readonly stream_name: string;
+            readonly status: components["schemas"]["ApplicationReadStatusEnum"];
+            /** Plot/Land Plan Number */
+            readonly plpn: string;
+            /** Format: decimal */
+            readonly plot_area_sqm: string | null;
+            /** Format: decimal */
+            readonly proposed_bua_sqm: string | null;
+            /** Format: decimal */
+            readonly existing_bua_sqm: string | null;
+            /** Format: decimal */
+            readonly zonal_rrr: string | null;
+            /** Format: date-time */
+            readonly submitted_at: string | null;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description * `draft` - Draft
+         *     * `submitted` - Submitted
+         *     * `under_scrutiny` - Under Scrutiny
+         *     * `awaiting_next_milestone` - Awaiting Next Milestone
+         *     * `rejected` - Rejected
+         *     * `approved` - Approved
+         *     * `expired` - Expired
+         *     * `withdrawn` - Withdrawn
+         * @enum {string}
+         */
+        ApplicationReadStatusEnum: "draft" | "submitted" | "under_scrutiny" | "awaiting_next_milestone" | "rejected" | "approved" | "expired" | "withdrawn";
         AuditEvent: {
             readonly id: number;
             readonly sequence: number | null;
@@ -613,6 +755,19 @@ export interface components {
             /** Format: date-time */
             locked_at?: string | null;
         };
+        FeeEstimateResponse: {
+            /** Format: decimal */
+            scrutiny_fee: string;
+            /** Format: decimal */
+            security_deposit: string;
+            /** Format: decimal */
+            debris_deposit: string;
+            /** Format: decimal */
+            premium_total: string;
+            /** Format: decimal */
+            total_amount: string;
+            non_binding: boolean;
+        };
         HealthzResponse: {
             status: string;
         };
@@ -761,6 +916,40 @@ export interface components {
         SignupResponse: {
             token_id: number;
         };
+        StatusLookupResponse: {
+            application_number: string;
+            stream: string;
+            stream_code: string;
+            status: string;
+            /** Format: date-time */
+            submitted_at: string | null;
+            milestones: components["schemas"]["StatusMilestoneItem"][];
+        };
+        StatusMilestoneItem: {
+            code: string;
+            name: string;
+            sequence: number;
+            status: string;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            completed_at: string | null;
+            is_deemed: boolean;
+        };
+        StreamListItem: {
+            id: number;
+            code: string;
+            name: string;
+            description: string;
+            milestones: components["schemas"]["StreamMilestoneItem"][];
+        };
+        StreamMilestoneItem: {
+            code: string;
+            name: string;
+            sequence: number;
+            sla_working_days: number;
+            deemed_clearance_eligible: boolean;
+        };
         /**
          * @description * `applicant` - Applicant
          *     * `officer` - Officer
@@ -790,6 +979,50 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    applications_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRead"][];
+                };
+            };
+        };
+    };
+    applications_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplicationCreateRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["ApplicationCreateRequest"];
+                "multipart/form-data": components["schemas"]["ApplicationCreateRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRead"];
+                };
+            };
+        };
+    };
     applications_milestones_list: {
         parameters: {
             query?: never;
@@ -835,6 +1068,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MilestoneInstance"];
+                };
+            };
+        };
+    };
+    applications_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRead"];
+                };
+            };
+        };
+    };
+    applications_submit_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationRead"];
+                };
+            };
+        };
+    };
+    applications_status_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusLookupResponse"];
+                };
+            };
+        };
+    };
+    applications_streams_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StreamListItem"][];
                 };
             };
         };
@@ -1331,6 +1644,25 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaymentRead"];
+                };
+            };
+        };
+    };
+    fees_estimate_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeeEstimateResponse"];
                 };
             };
         };

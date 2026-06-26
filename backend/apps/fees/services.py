@@ -9,6 +9,94 @@ from apps.compliance.services import record_audit_event
 from apps.fees.models import Concession, ConfigParameter, FeeAssessment, Payment
 
 
+def _compute_fee_breakdown(
+    *,
+    proposed_bua_sqm: Decimal,
+    plot_area_sqm: Decimal | None,
+    zonal_rrr: Decimal,
+    open_space_shortfall_sqm: Decimal | None = None,
+    parking_waiver_sqm: Decimal | None = None,
+) -> dict:
+    """
+    Pure arithmetic — no DB writes. Returns a breakdown dict with keys:
+      scrutiny_fee, security_deposit, debris_deposit,
+      premiums (list of concession dicts), premium_total, total_amount,
+      config_snapshot (the scrutiny_fee_per_sqm ConfigParameter row).
+
+    Each concession dict carries the fields needed to create a Concession row:
+      concession_type, detected_value, benchmark_value, premium_amount,
+      source, detection_method.
+    """
+    bua = proposed_bua_sqm
+    rrr = zonal_rrr
+
+    scrutiny_rate = get_decimal_config("scrutiny_fee_per_sqm")
+    security_rate = get_decimal_config("security_deposit_per_sqm")
+    debris_rate = get_decimal_config("debris_deposit_per_sqm")
+    coeff_fsi = get_decimal_config("premium_coefficient.additional_fsi")
+    coeff_open = get_decimal_config("premium_coefficient.open_space_shortfall")
+    coeff_park = get_decimal_config("premium_coefficient.parking_waiver")
+    benchmark_fsi = get_decimal_config("benchmark.additional_fsi")
+    config_snapshot = get_active_config("scrutiny_fee_per_sqm")
+
+    q = Decimal("0.01")
+    scrutiny = (scrutiny_rate * bua).quantize(q)
+    security = (security_rate * bua).quantize(q)
+    debris = (debris_rate * bua).quantize(q)
+
+    premiums = []
+
+    if plot_area_sqm and plot_area_sqm > 0 and (bua / plot_area_sqm) > benchmark_fsi:
+        excess = bua - plot_area_sqm * benchmark_fsi
+        premiums.append(
+            {
+                "concession_type": Concession.TYPE_FSI,
+                "detected_value": (bua / plot_area_sqm).quantize(Decimal("0.0001")),
+                "benchmark_value": benchmark_fsi.quantize(Decimal("0.0001")),
+                "premium_amount": (excess * rrr * coeff_fsi).quantize(q),
+                "source": "UPDR-2026 Table 4",
+                "detection_method": Concession.DETECTION_AUTO,
+            }
+        )
+
+    if open_space_shortfall_sqm is not None:
+        premiums.append(
+            {
+                "concession_type": Concession.TYPE_OPEN_SPACE,
+                "detected_value": open_space_shortfall_sqm.quantize(Decimal("0.0001")),
+                "benchmark_value": Decimal("0"),
+                "premium_amount": (open_space_shortfall_sqm * rrr * coeff_open).quantize(q),
+                "source": "Officer-declared",
+                "detection_method": Concession.DETECTION_DECLARED,
+            }
+        )
+
+    if parking_waiver_sqm is not None:
+        premiums.append(
+            {
+                "concession_type": Concession.TYPE_PARKING,
+                "detected_value": parking_waiver_sqm.quantize(Decimal("0.0001")),
+                "benchmark_value": Decimal("0"),
+                "premium_amount": (parking_waiver_sqm * rrr * coeff_park).quantize(q),
+                "source": "Officer-declared",
+                "detection_method": Concession.DETECTION_DECLARED,
+            }
+        )
+
+    premium_total = sum((p["premium_amount"] for p in premiums), Decimal("0"))
+    total = (scrutiny + security + debris + premium_total).quantize(q)
+
+    return {
+        "scrutiny_fee": scrutiny,
+        "security_deposit": security,
+        "debris_deposit": debris,
+        "premiums": premiums,
+        "premium_total": premium_total,
+        "total_amount": total,
+        "config_snapshot": config_snapshot,
+    }
+
+
 def get_active_config(key: str) -> ConfigParameter:
     """
     Return the ConfigParameter with the latest effective_from <= today for key.
@@ -59,75 +147,25 @@ def assess_fee(
             "Cannot assess fee: application.proposed_bua_sqm and zonal_rrr must both be set."
         )
 
-    scrutiny_rate = get_decimal_config("scrutiny_fee_per_sqm")
-    security_rate = get_decimal_config("security_deposit_per_sqm")
-    debris_rate = get_decimal_config("debris_deposit_per_sqm")
-    coeff_fsi = get_decimal_config("premium_coefficient.additional_fsi")
-    coeff_open = get_decimal_config("premium_coefficient.open_space_shortfall")
-    coeff_park = get_decimal_config("premium_coefficient.parking_waiver")
-    benchmark_fsi = get_decimal_config("benchmark.additional_fsi")
+    bd = _compute_fee_breakdown(
+        proposed_bua_sqm=bua,
+        plot_area_sqm=application.plot_area_sqm,
+        zonal_rrr=rrr,
+        open_space_shortfall_sqm=open_space_shortfall_sqm,
+        parking_waiver_sqm=parking_waiver_sqm,
+    )
 
-    config_snapshot = get_active_config("scrutiny_fee_per_sqm")
-
-    q = Decimal("0.01")
-    scrutiny = (scrutiny_rate * bua).quantize(q)
-    security = (security_rate * bua).quantize(q)
-    debris = (debris_rate * bua).quantize(q)
-
-    concessions = []
-
-    plot_area = application.plot_area_sqm
-    if plot_area and plot_area > 0 and (bua / plot_area) > benchmark_fsi:
-        excess = bua - plot_area * benchmark_fsi
-        premium = (excess * rrr * coeff_fsi).quantize(q)
-        c = Concession.objects.create(
-            application=application,
-            concession_type=Concession.TYPE_FSI,
-            detected_value=(bua / plot_area).quantize(Decimal("0.0001")),
-            benchmark_value=benchmark_fsi.quantize(Decimal("0.0001")),
-            premium_amount=premium,
-            source="UPDR-2026 Table 4",
-            detection_method=Concession.DETECTION_AUTO,
-        )
-        concessions.append(c)
-
-    if open_space_shortfall_sqm is not None:
-        premium = (open_space_shortfall_sqm * rrr * coeff_open).quantize(q)
-        c = Concession.objects.create(
-            application=application,
-            concession_type=Concession.TYPE_OPEN_SPACE,
-            detected_value=open_space_shortfall_sqm.quantize(Decimal("0.0001")),
-            benchmark_value=Decimal("0"),
-            premium_amount=premium,
-            source="Officer-declared",
-            detection_method=Concession.DETECTION_DECLARED,
-        )
-        concessions.append(c)
-
-    if parking_waiver_sqm is not None:
-        premium = (parking_waiver_sqm * rrr * coeff_park).quantize(q)
-        c = Concession.objects.create(
-            application=application,
-            concession_type=Concession.TYPE_PARKING,
-            detected_value=parking_waiver_sqm.quantize(Decimal("0.0001")),
-            benchmark_value=Decimal("0"),
-            premium_amount=premium,
-            source="Officer-declared",
-            detection_method=Concession.DETECTION_DECLARED,
-        )
-        concessions.append(c)
-
-    premium_total = sum((c.premium_amount for c in concessions), Decimal("0"))
-    total = (scrutiny + security + debris + premium_total).quantize(q)
+    for p in bd["premiums"]:
+        Concession.objects.create(application=application, **p)
 
     assessment = FeeAssessment.objects.create(
         application=application,
-        config_version=config_snapshot,
-        scrutiny_fee=scrutiny,
-        security_deposit=security,
-        debris_deposit=debris,
-        premium_total=premium_total,
-        total_amount=total,
+        config_version=bd["config_snapshot"],
+        scrutiny_fee=bd["scrutiny_fee"],
+        security_deposit=bd["security_deposit"],
+        debris_deposit=bd["debris_deposit"],
+        premium_total=bd["premium_total"],
+        total_amount=bd["total_amount"],
         assessed_by=assessed_by,
         bua_sqm_snapshot=bua,
         zonal_rrr_snapshot=rrr,
@@ -140,18 +178,7 @@ def assess_fee(
         target_type="FeeAssessment",
         target_id=assessment.pk,
         actor=assessed_by,
-        payload={
-            "total": str(total),
-            "config": {
-                "scrutiny_fee_per_sqm": str(scrutiny_rate),
-                "security_deposit_per_sqm": str(security_rate),
-                "debris_deposit_per_sqm": str(debris_rate),
-                "premium_coefficient.additional_fsi": str(coeff_fsi),
-                "premium_coefficient.open_space_shortfall": str(coeff_open),
-                "premium_coefficient.parking_waiver": str(coeff_park),
-                "benchmark.additional_fsi": str(benchmark_fsi),
-            },
-        },
+        payload={"total": str(bd["total_amount"])},
     )
     return assessment
 

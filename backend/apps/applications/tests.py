@@ -809,3 +809,124 @@ def test_officer_queue_requires_auth():
     client = APIClient()
     response = client.get("/api/officer/queue/")
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — Applicant views
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_stream_list_requires_no_auth():
+    """GET /api/applications/streams/ is public."""
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    response = client.get("/api/applications/streams/")
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_stream_list_returns_active_streams():
+    """Only is_active=True streams appear; inactive are excluded."""
+    from rest_framework.test import APIClient
+
+    active = _make_stream("P10_ACTIVE")
+    inactive = Stream.objects.create(code="P10_INACTIVE", name="Inactive", is_active=False)
+
+    client = APIClient()
+    data = client.get("/api/applications/streams/").json()
+    codes = [s["code"] for s in data]
+    assert active.code in codes
+    assert inactive.code not in codes
+
+
+@pytest.mark.django_db
+def test_status_lookup_requires_no_auth():
+    """GET /api/applications/status/ is public."""
+    from rest_framework.test import APIClient
+
+    user = _make_user("p10_sl_user")
+    stream = _make_stream("P10_SL_STR")
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+    app.refresh_from_db()
+
+    client = APIClient()
+    response = client.get(
+        "/api/applications/status/", {"application_number": app.application_number}
+    )
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_status_lookup_returns_milestones():
+    """Response includes a milestones list."""
+    from rest_framework.test import APIClient
+
+    user = _make_user("p10_slm_user")
+    stream = _make_stream("P10_SLM")
+    _make_stream_milestone(stream, _make_milestone("P10SLM_M1", sla_days=3), sequence=1)
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+    app.refresh_from_db()
+
+    client = APIClient()
+    data = client.get(
+        "/api/applications/status/", {"application_number": app.application_number}
+    ).json()
+    assert "milestones" in data
+    assert len(data["milestones"]) >= 1
+
+
+@pytest.mark.django_db
+def test_application_list_requires_auth():
+    """Unauthenticated GET /api/applications/ returns 403."""
+    from rest_framework.test import APIClient
+
+    client = APIClient()
+    assert client.get("/api/applications/").status_code == 403
+
+
+@pytest.mark.django_db
+def test_application_create_returns_blank_number():
+    """POST /api/applications/ creates a draft with blank application_number."""
+    from rest_framework.test import APIClient
+
+    user = _make_user("p10_create_user")
+    stream = _make_stream("P10_CREATE")
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(
+        "/api/applications/",
+        {
+            "stream_id": stream.pk,
+            "plpn": "PLT-001",
+            "plot_area_sqm": "500.00",
+            "proposed_bua_sqm": "300.00",
+            "existing_bua_sqm": "0.00",
+            "zonal_rrr": "45000.00",
+        },
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.json()["application_number"] == ""
+
+
+@pytest.mark.django_db
+def test_application_submit_assigns_number():
+    """POST /api/applications/<pk>/submit/ assigns a non-blank application_number."""
+    from rest_framework.test import APIClient
+
+    user = _make_user("p10_submit_user")
+    stream = _make_stream("P10_SUBMIT")
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+
+    client = APIClient()
+    client.force_authenticate(user=user)
+    response = client.post(f"/api/applications/{app.pk}/submit/")
+    assert response.status_code == 200
+    number = response.json()["application_number"]
+    assert number != ""
+    assert number.startswith("MBPASPA")

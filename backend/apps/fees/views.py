@@ -1,4 +1,7 @@
-from drf_spectacular.utils import extend_schema, extend_schema_view
+from decimal import Decimal, InvalidOperation
+
+from drf_spectacular.utils import extend_schema, extend_schema_view, inline_serializer
+from rest_framework import serializers as drf_serializers
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -13,12 +16,81 @@ from apps.fees.serializers import (
     PaymentVerifySerializer,
 )
 from apps.fees.services import (
+    _compute_fee_breakdown,
     _get_current_assessment,
     assess_fee,
     reassess_fee,
     record_payment,
     verify_payment,
 )
+
+
+class FeeEstimateView(APIView):
+    permission_classes = []
+    authentication_classes = []
+
+    @extend_schema(
+        responses={
+            200: inline_serializer(
+                "FeeEstimateResponse",
+                {
+                    "scrutiny_fee": drf_serializers.DecimalField(max_digits=14, decimal_places=2),
+                    "security_deposit": drf_serializers.DecimalField(
+                        max_digits=14, decimal_places=2
+                    ),
+                    "debris_deposit": drf_serializers.DecimalField(max_digits=14, decimal_places=2),
+                    "premium_total": drf_serializers.DecimalField(max_digits=14, decimal_places=2),
+                    "total_amount": drf_serializers.DecimalField(max_digits=14, decimal_places=2),
+                    "non_binding": drf_serializers.BooleanField(),
+                },
+            )
+        }
+    )
+    def get(self, request):
+        def _decimal(key, required=True):
+            raw = request.query_params.get(key, "").strip()
+            if not raw:
+                if required:
+                    return None, f"{key} is required."
+                return None, None
+            try:
+                return Decimal(raw), None
+            except InvalidOperation:
+                return None, f"{key} must be a valid decimal number."
+
+        bua, err = _decimal("proposed_bua_sqm")
+        if err:
+            return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
+        plot, err = _decimal("plot_area_sqm")
+        if err:
+            return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
+        rrr, err = _decimal("zonal_rrr")
+        if err:
+            return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
+        open_space, err = _decimal("open_space_shortfall_sqm", required=False)
+        if err:
+            return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
+        parking, err = _decimal("parking_waiver_sqm", required=False)
+        if err:
+            return Response({"detail": err}, status=status.HTTP_400_BAD_REQUEST)
+
+        bd = _compute_fee_breakdown(
+            proposed_bua_sqm=bua,
+            plot_area_sqm=plot,
+            zonal_rrr=rrr,
+            open_space_shortfall_sqm=open_space,
+            parking_waiver_sqm=parking,
+        )
+        return Response(
+            {
+                "scrutiny_fee": str(bd["scrutiny_fee"]),
+                "security_deposit": str(bd["security_deposit"]),
+                "debris_deposit": str(bd["debris_deposit"]),
+                "premium_total": str(bd["premium_total"]),
+                "total_amount": str(bd["total_amount"]),
+                "non_binding": True,
+            }
+        )
 
 
 def _get_application(kwargs):

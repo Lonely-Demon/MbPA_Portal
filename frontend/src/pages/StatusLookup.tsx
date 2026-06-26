@@ -2,11 +2,22 @@ import { useState } from "react";
 import { api, ApiError } from "../lib/api";
 import { cn } from "../lib/utils";
 
+interface MilestoneSummary {
+  code: string;
+  name: string;
+  sequence: number;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  is_deemed: boolean;
+}
+
 interface StatusResult {
   application_number: string;
   status: string;
   stream: string;
   submitted_at: string | null;
+  milestones: MilestoneSummary[];
 }
 
 export default function StatusLookup() {
@@ -68,26 +79,70 @@ export default function StatusLookup() {
         )}
 
         {result && (
-          <dl className="mt-6 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate">Application</dt>
-              <dd className="font-mono font-medium text-harbour">{result.application_number}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate">Stream</dt>
-              <dd>{result.stream}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate">Status</dt>
-              <dd className="capitalize font-medium text-teal">{result.status.replace(/_/g, " ")}</dd>
-            </div>
-            {result.submitted_at && (
+          <>
+            <dl className="mt-6 space-y-2 text-sm">
               <div className="flex justify-between">
-                <dt className="text-slate">Submitted</dt>
-                <dd>{new Date(result.submitted_at).toLocaleDateString("en-IN")}</dd>
+                <dt className="text-slate">Application</dt>
+                <dd className="font-mono font-medium text-harbour">{result.application_number}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate">Stream</dt>
+                <dd>{result.stream}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate">Status</dt>
+                <dd className="capitalize font-medium text-teal">{result.status.replace(/_/g, " ")}</dd>
+              </div>
+              {result.submitted_at && (
+                <div className="flex justify-between">
+                  <dt className="text-slate">Submitted</dt>
+                  <dd>{new Date(result.submitted_at).toLocaleDateString("en-IN")}</dd>
+                </div>
+              )}
+            </dl>
+
+            {result.milestones && result.milestones.length > 0 && (
+              <div className="mt-5 border-t pt-4">
+                <h3 className="text-sm font-medium text-harbour mb-3">Milestones</h3>
+                <ol className="space-y-2">
+                  {result.milestones.map((m) => (
+                    <li key={m.code} className="flex items-start gap-3 text-sm">
+                      <span
+                        className={cn(
+                          "mt-0.5 w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center text-xs",
+                          m.status === "completed" && "bg-teal text-white",
+                          m.status === "in_progress" && "bg-amber-400 text-white",
+                          m.status === "pending" && "bg-paper-dark text-slate",
+                        )}
+                      >
+                        {m.status === "completed" ? "✓" : m.sequence}
+                      </span>
+                      <div className="flex-1">
+                        <span
+                          className={cn(
+                            m.status === "in_progress" && "font-medium text-harbour",
+                            m.status === "pending" && "text-slate",
+                          )}
+                        >
+                          {m.name}
+                        </span>
+                        {m.completed_at && (
+                          <span className="block text-xs text-slate">
+                            {new Date(m.completed_at).toLocaleDateString("en-IN")}
+                          </span>
+                        )}
+                      </div>
+                      {m.is_deemed && (
+                        <span className="text-xs bg-teal/10 text-teal rounded px-1.5 py-0.5 flex-shrink-0">
+                          Deemed
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ol>
               </div>
             )}
-          </dl>
+          </>
         )}
       </div>
     </div>

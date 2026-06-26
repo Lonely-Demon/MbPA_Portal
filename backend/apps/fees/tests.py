@@ -401,3 +401,111 @@ def test_verify_payment_locks_assessment():
     payment.assessment.refresh_from_db()
     assert payment.assessment.is_locked is True
     assert payment.assessment.locked_at is not None
+
+
+# ---------------------------------------------------------------------------
+# Phase 10 — _compute_fee_breakdown parity + FeeEstimateView
+# ---------------------------------------------------------------------------
+
+
+def _seed_all_config(su):
+    """Seed the full set of config keys needed for fee arithmetic."""
+    keys = {
+        "scrutiny_fee_per_sqm": "10.00",
+        "security_deposit_per_sqm": "20.00",
+        "debris_deposit_per_sqm": "5.00",
+        "premium_coefficient.additional_fsi": "0.10",
+        "premium_coefficient.open_space_shortfall": "0.05",
+        "premium_coefficient.parking_waiver": "0.03",
+        "benchmark.additional_fsi": "2.50",
+    }
+    for key, val in keys.items():
+        _make_config(key, val, superuser=su)
+
+
+@pytest.mark.django_db
+def test_compute_fee_breakdown_parity():
+    """_compute_fee_breakdown() produces the same total_amount as assess_fee()."""
+    from apps.applications.models import Stream
+    from apps.applications.services import create_application
+    from apps.fees.services import _compute_fee_breakdown, assess_fee
+
+    su = _make_superuser("parity_su")
+    _seed_all_config(su)
+
+    stream = Stream.objects.create(code="PAR_STR", name="Parity Stream", is_active=True)
+    app = create_application(
+        stream_id=stream.pk,
+        submitted_by=su,
+        plot_area_sqm=Decimal("200.00"),
+        proposed_bua_sqm=Decimal("600.00"),  # 3.0 FSI > benchmark 2.5 → FSI premium
+        existing_bua_sqm=Decimal("0.00"),
+        zonal_rrr=Decimal("50000.00"),
+    )
+
+    open_space = Decimal("20.00")
+    parking = Decimal("10.00")
+
+    bd = _compute_fee_breakdown(
+        proposed_bua_sqm=app.proposed_bua_sqm,
+        plot_area_sqm=app.plot_area_sqm,
+        zonal_rrr=app.zonal_rrr,
+        open_space_shortfall_sqm=open_space,
+        parking_waiver_sqm=parking,
+    )
+
+    assessment = assess_fee(
+        application=app,
+        assessed_by=su,
+        open_space_shortfall_sqm=open_space,
+        parking_waiver_sqm=parking,
+    )
+
+    assert bd["total_amount"] == assessment.total_amount
+    assert bd["scrutiny_fee"] == assessment.scrutiny_fee
+    assert bd["security_deposit"] == assessment.security_deposit
+    assert bd["debris_deposit"] == assessment.debris_deposit
+    assert bd["premium_total"] == assessment.premium_total
+
+
+@pytest.mark.django_db
+def test_estimate_view_creates_zero_db_rows():
+    """GET /api/fees/estimate/ must not write any DB rows."""
+    from rest_framework.test import APIClient
+
+    from apps.fees.models import Concession, FeeAssessment
+
+    su = _make_superuser("estimate_su")
+    _seed_all_config(su)
+
+    client = APIClient()
+    response = client.get(
+        "/api/fees/estimate/",
+        {
+            "proposed_bua_sqm": "300.00",
+            "plot_area_sqm": "100.00",
+            "zonal_rrr": "40000.00",
+        },
+    )
+    assert response.status_code == 200
+    assert FeeAssessment.objects.count() == 0
+    assert Concession.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_estimate_view_requires_no_auth():
+    """GET /api/fees/estimate/ is public — no session needed."""
+    from rest_framework.test import APIClient
+
+    su = _make_superuser("estimate_noauth_su")
+    _seed_all_config(su)
+
+    client = APIClient()
+    response = client.get(
+        "/api/fees/estimate/",
+        {"proposed_bua_sqm": "100.00", "plot_area_sqm": "50.00", "zonal_rrr": "30000.00"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["non_binding"] is True
+    assert "total_amount" in data

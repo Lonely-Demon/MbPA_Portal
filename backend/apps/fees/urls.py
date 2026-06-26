@@ -5,6 +5,7 @@ from . import views
 app_name = "fees"
 
 urlpatterns = [
+    path("estimate/", views.FeeEstimateView.as_view(), name="estimate"),
     path(
         "<str:application_number>/assessment/",
         views.FeeAssessmentView.as_view(),

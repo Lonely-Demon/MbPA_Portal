@@ -6,6 +6,77 @@
         "description": "Mumbai Port Authority Special Planning Authority — UPDR-2026 building permission workflow."
     },
     "paths": {
+        "/api/applications/": {
+            "get": {
+                "operationId": "applications_list",
+                "tags": [
+                    "applications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ApplicationRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "applications_create",
+                "tags": [
+                    "applications"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ApplicationCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ApplicationCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ApplicationCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApplicationRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/applications/{application_number}/milestones/": {
             "get": {
                 "operationId": "applications_milestones_list",
@@ -99,6 +170,119 @@
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/MilestoneInstance"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/applications/{id}/": {
+            "get": {
+                "operationId": "applications_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApplicationRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/applications/{id}/submit/": {
+            "post": {
+                "operationId": "applications_submit_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ApplicationRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/applications/status/": {
+            "get": {
+                "operationId": "applications_status_retrieve",
+                "tags": [
+                    "applications"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/StatusLookupResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/applications/streams/": {
+            "get": {
+                "operationId": "applications_streams_list",
+                "tags": [
+                    "applications"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/StreamListItem"
+                                    }
                                 }
                             }
                         },
@@ -998,6 +1182,26 @@
                 }
             }
         },
+        "/api/fees/estimate/": {
+            "get": {
+                "operationId": "fees_estimate_retrieve",
+                "tags": [
+                    "fees"
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FeeEstimateResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/healthz/": {
             "get": {
                 "operationId": "healthz_retrieve",
@@ -1297,6 +1501,147 @@
                 ],
                 "type": "string",
                 "description": "* `approve` - approve\n* `reject` - reject\n* `return_for_correction` - return_for_correction"
+            },
+            "ApplicationCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "stream_id": {
+                        "type": "integer"
+                    },
+                    "plpn": {
+                        "type": "string",
+                        "default": "",
+                        "maxLength": 50
+                    },
+                    "plot_area_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    },
+                    "proposed_bua_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    },
+                    "existing_bua_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    },
+                    "zonal_rrr": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    }
+                },
+                "required": [
+                    "existing_bua_sqm",
+                    "plot_area_sqm",
+                    "proposed_bua_sqm",
+                    "stream_id",
+                    "zonal_rrr"
+                ]
+            },
+            "ApplicationRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application_number": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "stream_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "stream_name": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "status": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ApplicationReadStatusEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "plpn": {
+                        "type": "string",
+                        "readOnly": true,
+                        "title": "Plot/Land Plan Number"
+                    },
+                    "plot_area_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "proposed_bua_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "existing_bua_sqm": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "zonal_rrr": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "submitted_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "application_number",
+                    "created_at",
+                    "existing_bua_sqm",
+                    "id",
+                    "plot_area_sqm",
+                    "plpn",
+                    "proposed_bua_sqm",
+                    "status",
+                    "stream_code",
+                    "stream_name",
+                    "submitted_at",
+                    "zonal_rrr"
+                ]
+            },
+            "ApplicationReadStatusEnum": {
+                "enum": [
+                    "draft",
+                    "submitted",
+                    "under_scrutiny",
+                    "awaiting_next_milestone",
+                    "rejected",
+                    "approved",
+                    "expired",
+                    "withdrawn"
+                ],
+                "type": "string",
+                "description": "* `draft` - Draft\n* `submitted` - Submitted\n* `under_scrutiny` - Under Scrutiny\n* `awaiting_next_milestone` - Awaiting Next Milestone\n* `rejected` - Rejected\n* `approved` - Approved\n* `expired` - Expired\n* `withdrawn` - Withdrawn"
             },
             "AuditEvent": {
                 "type": "object",
@@ -1739,6 +2084,47 @@
                     "security_deposit",
                     "total_amount",
                     "zonal_rrr_snapshot"
+                ]
+            },
+            "FeeEstimateResponse": {
+                "type": "object",
+                "properties": {
+                    "scrutiny_fee": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "security_deposit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "debris_deposit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "premium_total": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "total_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "non_binding": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "debris_deposit",
+                    "non_binding",
+                    "premium_total",
+                    "scrutiny_fee",
+                    "security_deposit",
+                    "total_amount"
                 ]
             },
             "HealthzResponse": {
@@ -2225,6 +2611,138 @@
                 },
                 "required": [
                     "token_id"
+                ]
+            },
+            "StatusLookupResponse": {
+                "type": "object",
+                "properties": {
+                    "application_number": {
+                        "type": "string"
+                    },
+                    "stream": {
+                        "type": "string"
+                    },
+                    "stream_code": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "submitted_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "milestones": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StatusMilestoneItem"
+                        }
+                    }
+                },
+                "required": [
+                    "application_number",
+                    "milestones",
+                    "status",
+                    "stream",
+                    "stream_code",
+                    "submitted_at"
+                ]
+            },
+            "StatusMilestoneItem": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "sequence": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "is_deemed": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code",
+                    "completed_at",
+                    "is_deemed",
+                    "name",
+                    "sequence",
+                    "started_at",
+                    "status"
+                ]
+            },
+            "StreamListItem": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "milestones": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/StreamMilestoneItem"
+                        }
+                    }
+                },
+                "required": [
+                    "code",
+                    "description",
+                    "id",
+                    "milestones",
+                    "name"
+                ]
+            },
+            "StreamMilestoneItem": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "sequence": {
+                        "type": "integer"
+                    },
+                    "sla_working_days": {
+                        "type": "integer"
+                    },
+                    "deemed_clearance_eligible": {
+                        "type": "boolean"
+                    }
+                },
+                "required": [
+                    "code",
+                    "deemed_clearance_eligible",
+                    "name",
+                    "sequence",
+                    "sla_working_days"
                 ]
             },
             "UserTypeEnum": {
