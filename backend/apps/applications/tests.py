@@ -753,8 +753,9 @@ def test_officer_queue_returns_only_assigned_in_progress():
 @pytest.mark.django_db
 def test_officer_queue_includes_document_count():
     """document_count in queue response reflects non-deleted documents only."""
-    from apps.documents.models import DocumentUpload
     from rest_framework.test import APIClient
+
+    from apps.documents.models import DocumentUpload
 
     officer = _make_officer("dc_oq_officer1")
     user = _make_user("dc_oq_owner1")
