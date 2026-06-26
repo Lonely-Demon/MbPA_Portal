@@ -1,0 +1,2292 @@
+{
+    "openapi": "3.0.3",
+    "info": {
+        "title": "MbPA Building Permission Portal API",
+        "version": "0.1.0",
+        "description": "Mumbai Port Authority Special Planning Authority — UPDR-2026 building permission workflow."
+    },
+    "paths": {
+        "/api/applications/{application_number}/milestones/": {
+            "get": {
+                "operationId": "applications_milestones_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/MilestoneInstance"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/applications/{application_number}/milestones/{id}/action/": {
+            "post": {
+                "operationId": "applications_milestones_action_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "applications"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MilestoneActionRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MilestoneActionRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/MilestoneActionRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/MilestoneInstance"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/certificates/{application_number}/": {
+            "get": {
+                "operationId": "certificates_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "certificates"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/_Certificate"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/certificates/{application_number}/{id}/download/": {
+            "get": {
+                "operationId": "certificates_download_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "certificates"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DownloadUrlResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/certificates/{application_number}/{id}/receive-signed/": {
+            "post": {
+                "operationId": "certificates_receive_signed_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "certificates"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SignedPdfUploadRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/_Certificate"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "422": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/compliance/audit/{target_type}/{target_id}/": {
+            "get": {
+                "operationId": "compliance_audit_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "target_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "target_type",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/AuditEvent"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/clearances/{application_number}/": {
+            "get": {
+                "operationId": "compliance_clearances_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ConditionalClearanceRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/clearances/{application_number}/create/": {
+            "post": {
+                "operationId": "compliance_clearances_create_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConditionalClearanceCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConditionalClearanceCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ConditionalClearanceCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConditionalClearanceRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/clearances/{id}/fulfill/": {
+            "patch": {
+                "operationId": "compliance_clearances_fulfill_partial_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedConditionalClearanceFulfillRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedConditionalClearanceFulfillRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedConditionalClearanceFulfillRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ConditionalClearanceRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/complaints/": {
+            "get": {
+                "operationId": "complaints_list",
+                "tags": [
+                    "compliance"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ComplaintRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "compliance_complaints_create",
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ComplaintCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ComplaintCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ComplaintCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ComplaintRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/complaints/{id}/": {
+            "get": {
+                "operationId": "complaints_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ComplaintRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "patch": {
+                "operationId": "compliance_complaints_partial_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedComplaintResolveRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedComplaintResolveRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedComplaintResolveRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ComplaintRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/csrf/": {
+            "get": {
+                "operationId": "csrf_retrieve",
+                "description": "Return a CSRF cookie. React calls this once on mount.",
+                "tags": [
+                    "csrf"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/CsrfResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/documents/{id}/": {
+            "get": {
+                "operationId": "documents_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DocumentUploadRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/documents/{id}/presigned/": {
+            "get": {
+                "operationId": "documents_presigned_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PresignedUrlResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/documents/slots/{milestone_instance_id}/": {
+            "get": {
+                "operationId": "documents_slots_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "milestone_instance_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "documents"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/DocumentSlotRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/documents/upload/": {
+            "post": {
+                "operationId": "documents_upload_create",
+                "tags": [
+                    "documents"
+                ],
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DocumentUploadCreateRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DocumentUploadRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/fees/{application_number}/assessment/": {
+            "get": {
+                "operationId": "fees_assessment_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "fees"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FeeAssessmentRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "fees_assessment_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "fees"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FeeAssessmentRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    },
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/FeeAssessmentRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/fees/{application_number}/payments/": {
+            "get": {
+                "operationId": "fees_payments_list",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "fees"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/PaymentRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/fees/{application_number}/payments/{id}/verify/": {
+            "patch": {
+                "operationId": "fees_payments_verify_partial_update",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "fees"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPaymentVerifyRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPaymentVerifyRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedPaymentVerifyRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/fees/{application_number}/payments/record/": {
+            "post": {
+                "operationId": "fees_payments_record_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "application_number",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "fees"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentRecordRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentRecordRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PaymentRecordRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PaymentRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/healthz/": {
+            "get": {
+                "operationId": "healthz_retrieve",
+                "tags": [
+                    "healthz"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HealthzResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/login/": {
+            "post": {
+                "operationId": "identity_login_create",
+                "tags": [
+                    "identity"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequestRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequestRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/LoginRequestRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LoginResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/logout/": {
+            "post": {
+                "operationId": "identity_logout_create",
+                "tags": [
+                    "identity"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/LogoutResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/me/": {
+            "get": {
+                "operationId": "identity_me_retrieve",
+                "tags": [
+                    "identity"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Me"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/otp/resend/": {
+            "post": {
+                "operationId": "identity_otp_resend_create",
+                "tags": [
+                    "identity"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpResendRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpResendRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpResendRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OtpResendResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/otp/verify/": {
+            "post": {
+                "operationId": "identity_otp_verify_create",
+                "tags": [
+                    "identity"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpVerifyRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpVerifyRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/OtpVerifyRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/OtpVerifyResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/identity/signup/": {
+            "post": {
+                "operationId": "identity_signup_create",
+                "tags": [
+                    "identity"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SignupRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SignupRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/SignupRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SignupResponse"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/officer/queue/": {
+            "get": {
+                "operationId": "officer_queue_list",
+                "tags": [
+                    "officer"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/OfficerQueueItem"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "ActionEnum": {
+                "enum": [
+                    "approve",
+                    "reject",
+                    "return_for_correction"
+                ],
+                "type": "string",
+                "description": "* `approve` - approve\n* `reject` - reject\n* `return_for_correction` - return_for_correction"
+            },
+            "AuditEvent": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true,
+                        "nullable": true
+                    },
+                    "verb": {
+                        "type": "string",
+                        "maxLength": 100
+                    },
+                    "target_type": {
+                        "type": "string",
+                        "maxLength": 100
+                    },
+                    "target_id": {
+                        "type": "integer",
+                        "maximum": 9223372036854775807,
+                        "minimum": -9223372036854775808,
+                        "format": "int64"
+                    },
+                    "actor": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "payload": {},
+                    "ip_address": {
+                        "type": "string",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "created_at",
+                    "id",
+                    "sequence",
+                    "target_id",
+                    "target_type",
+                    "verb"
+                ]
+            },
+            "CertificateTypeEnum": {
+                "enum": [
+                    "aip",
+                    "development_permission",
+                    "commencement_plinth",
+                    "further_commencement",
+                    "commencement_80pct",
+                    "commencement_rem20",
+                    "building_completion",
+                    "oc",
+                    "demolition_clearance"
+                ],
+                "type": "string",
+                "description": "* `aip` - Approval in Principle\n* `development_permission` - Development Permission\n* `commencement_plinth` - Commencement Certificate to Plinth\n* `further_commencement` - Further Commencement Certificate\n* `commencement_80pct` - Commencement Certificate (80% BUA)\n* `commencement_rem20` - Commencement Certificate (Remaining 20%)\n* `building_completion` - Building Completion Certificate\n* `oc` - Occupancy Certificate\n* `demolition_clearance` - Demolition & Site Clearance Certificate"
+            },
+            "ClearanceTypeEnum": {
+                "enum": [
+                    "railway",
+                    "crz",
+                    "heritage_mhcc",
+                    "aviation_aai",
+                    "pollution_mpcb"
+                ],
+                "type": "string",
+                "description": "* `railway` - Railway Authority NOC\n* `crz` - CRZ / MCZMA Coastal Clearance\n* `heritage_mhcc` - MHCC Heritage Clearance\n* `aviation_aai` - AAI / Aviation Clearance\n* `pollution_mpcb` - MPCB Pollution Control Clearance"
+            },
+            "ComplaintCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "application_id": {
+                        "type": "integer"
+                    },
+                    "subject": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "body": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "application_id",
+                    "body",
+                    "subject"
+                ]
+            },
+            "ComplaintRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application": {
+                        "type": "integer"
+                    },
+                    "origin": {
+                        "$ref": "#/components/schemas/OriginEnum"
+                    },
+                    "raised_by": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "subject": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "body": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ComplaintReadStatusEnum"
+                    },
+                    "resolution_notes": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "resolved_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "application",
+                    "body",
+                    "created_at",
+                    "id",
+                    "origin",
+                    "subject",
+                    "updated_at"
+                ]
+            },
+            "ComplaintReadStatusEnum": {
+                "enum": [
+                    "open",
+                    "in_review",
+                    "resolved",
+                    "closed"
+                ],
+                "type": "string",
+                "description": "* `open` - Open\n* `in_review` - In Review\n* `resolved` - Resolved\n* `closed` - Closed"
+            },
+            "ConditionalClearanceCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "milestone_instance_id": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "clearance_type": {
+                        "$ref": "#/components/schemas/ClearanceTypeEnum"
+                    },
+                    "description": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "trigger_metadata": {}
+                },
+                "required": [
+                    "clearance_type",
+                    "description"
+                ]
+            },
+            "ConditionalClearanceRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application": {
+                        "type": "integer"
+                    },
+                    "milestone_instance": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "clearance_type": {
+                        "$ref": "#/components/schemas/ClearanceTypeEnum"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "trigger_metadata": {},
+                    "clearance_doc": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "is_fulfilled": {
+                        "type": "boolean"
+                    },
+                    "fulfilled_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "fulfilled_by": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "application",
+                    "clearance_type",
+                    "created_at",
+                    "description",
+                    "id"
+                ]
+            },
+            "CsrfResponse": {
+                "type": "object",
+                "properties": {
+                    "csrfToken": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "csrfToken"
+                ]
+            },
+            "DecisionEnum": {
+                "enum": [
+                    "verified",
+                    "rejected",
+                    "mismatch"
+                ],
+                "type": "string",
+                "description": "* `verified` - verified\n* `rejected` - rejected\n* `mismatch` - mismatch"
+            },
+            "DocumentSlotRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "stream_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "milestone_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "document_type": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "is_mandatory": {
+                        "type": "boolean"
+                    },
+                    "applies_when": {
+                        "type": "string",
+                        "maxLength": 64
+                    }
+                },
+                "required": [
+                    "document_type",
+                    "id",
+                    "milestone_code",
+                    "stream_code"
+                ]
+            },
+            "DocumentUploadCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "file": {
+                        "type": "string",
+                        "format": "binary"
+                    },
+                    "document_slot_id": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "milestone_instance_id": {
+                        "type": "integer",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "file"
+                ]
+            },
+            "DocumentUploadRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application_number": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "version": {
+                        "type": "integer",
+                        "maximum": 9223372036854775807,
+                        "minimum": 0,
+                        "format": "int64"
+                    },
+                    "original_filename": {
+                        "type": "string",
+                        "maxLength": 255
+                    },
+                    "content_type": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "size_bytes": {
+                        "type": "integer",
+                        "maximum": 9223372036854775807,
+                        "minimum": -9223372036854775808,
+                        "format": "int64"
+                    },
+                    "uploaded_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "presigned_url": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "application_number",
+                    "content_type",
+                    "id",
+                    "original_filename",
+                    "presigned_url",
+                    "size_bytes",
+                    "uploaded_at"
+                ]
+            },
+            "DownloadUrlResponse": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                },
+                "required": [
+                    "url"
+                ]
+            },
+            "FeeAssessmentRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "scrutiny_fee": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "security_deposit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "debris_deposit": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "premium_total": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "total_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "assessed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "bua_sqm_snapshot": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    },
+                    "zonal_rrr_snapshot": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,10}(?:\\.\\d{0,2})?$"
+                    },
+                    "is_current": {
+                        "type": "boolean"
+                    },
+                    "is_locked": {
+                        "type": "boolean"
+                    },
+                    "locked_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "assessed_at",
+                    "bua_sqm_snapshot",
+                    "debris_deposit",
+                    "id",
+                    "scrutiny_fee",
+                    "security_deposit",
+                    "total_amount",
+                    "zonal_rrr_snapshot"
+                ]
+            },
+            "HealthzResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "LoginRequestRequest": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1
+                    },
+                    "username": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "email",
+                    "password",
+                    "username"
+                ]
+            },
+            "LoginResponse": {
+                "type": "object",
+                "properties": {
+                    "token_id": {
+                        "type": "integer"
+                    },
+                    "masked_email": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "masked_email",
+                    "token_id"
+                ]
+            },
+            "LogoutResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "Me": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "readOnly": true,
+                        "title": "Email address"
+                    },
+                    "username": {
+                        "type": "string",
+                        "readOnly": true,
+                        "description": "Required. 150 characters or fewer. Letters, digits and @/./+/-/_ only."
+                    },
+                    "user_type": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/UserTypeEnum"
+                            }
+                        ],
+                        "readOnly": true
+                    },
+                    "is_mobile_verified": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "email",
+                    "id",
+                    "is_mobile_verified",
+                    "user_type",
+                    "username"
+                ]
+            },
+            "MilestoneActionRequest": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "$ref": "#/components/schemas/ActionEnum"
+                    },
+                    "decision_note": {
+                        "type": "string",
+                        "default": ""
+                    },
+                    "correction_reason": {
+                        "type": "string",
+                        "default": ""
+                    }
+                },
+                "required": [
+                    "action"
+                ]
+            },
+            "MilestoneInstance": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application_number": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "stream_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "milestone_code": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "sequence": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "status": {
+                        "type": "string",
+                        "readOnly": true
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "due_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "completed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "officer_remarks": {
+                        "type": "string",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "application_number",
+                    "completed_at",
+                    "due_at",
+                    "id",
+                    "milestone_code",
+                    "officer_remarks",
+                    "sequence",
+                    "started_at",
+                    "status",
+                    "stream_code"
+                ]
+            },
+            "OfficerQueueItem": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "application_number": {
+                        "type": "string"
+                    },
+                    "stream_code": {
+                        "type": "string"
+                    },
+                    "stream_name": {
+                        "type": "string"
+                    },
+                    "milestone_code": {
+                        "type": "string"
+                    },
+                    "milestone_name": {
+                        "type": "string"
+                    },
+                    "sequence": {
+                        "type": "integer"
+                    },
+                    "sla_working_days": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "due_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "document_count": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "application_number",
+                    "document_count",
+                    "due_at",
+                    "id",
+                    "milestone_code",
+                    "milestone_name",
+                    "sequence",
+                    "sla_working_days",
+                    "started_at",
+                    "status",
+                    "stream_code",
+                    "stream_name"
+                ]
+            },
+            "OriginEnum": {
+                "enum": [
+                    "applicant_raised",
+                    "system_raised"
+                ],
+                "type": "string",
+                "description": "* `applicant_raised` - Applicant Raised\n* `system_raised` - System Raised"
+            },
+            "OtpResendRequest": {
+                "type": "object",
+                "properties": {
+                    "token_id": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "token_id"
+                ]
+            },
+            "OtpResendResponse": {
+                "type": "object",
+                "properties": {
+                    "token_id": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "token_id"
+                ]
+            },
+            "OtpVerifyRequest": {
+                "type": "object",
+                "properties": {
+                    "token_id": {
+                        "type": "integer"
+                    },
+                    "code": {
+                        "type": "string",
+                        "minLength": 6,
+                        "maxLength": 6
+                    }
+                },
+                "required": [
+                    "code",
+                    "token_id"
+                ]
+            },
+            "OtpVerifyResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "PatchedComplaintResolveRequest": {
+                "type": "object",
+                "properties": {
+                    "resolution_notes": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                }
+            },
+            "PatchedConditionalClearanceFulfillRequest": {
+                "type": "object",
+                "properties": {
+                    "clearance_doc_id": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "PatchedPaymentVerifyRequest": {
+                "type": "object",
+                "properties": {
+                    "decision": {
+                        "$ref": "#/components/schemas/DecisionEnum"
+                    },
+                    "verified_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "remarks": {
+                        "type": "string",
+                        "default": ""
+                    }
+                }
+            },
+            "PaymentRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "challan_reference": {
+                        "type": "string",
+                        "maxLength": 100
+                    },
+                    "claimed_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "verified_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$",
+                        "nullable": true
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/PaymentReadStatusEnum"
+                    },
+                    "payment_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "verified_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "remarks": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "challan_reference",
+                    "claimed_amount",
+                    "created_at",
+                    "id",
+                    "payment_date"
+                ]
+            },
+            "PaymentReadStatusEnum": {
+                "enum": [
+                    "claimed",
+                    "verified",
+                    "rejected",
+                    "mismatch"
+                ],
+                "type": "string",
+                "description": "* `claimed` - Claimed\n* `verified` - Verified\n* `rejected` - Rejected\n* `mismatch` - Amount Mismatch"
+            },
+            "PaymentRecordRequest": {
+                "type": "object",
+                "properties": {
+                    "challan_reference": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                    },
+                    "claimed_amount": {
+                        "type": "string",
+                        "format": "decimal",
+                        "pattern": "^-?\\d{0,12}(?:\\.\\d{0,2})?$"
+                    },
+                    "payment_date": {
+                        "type": "string",
+                        "format": "date"
+                    }
+                },
+                "required": [
+                    "challan_reference",
+                    "claimed_amount",
+                    "payment_date"
+                ]
+            },
+            "PresignedUrlResponse": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "format": "uri"
+                    }
+                },
+                "required": [
+                    "url"
+                ]
+            },
+            "SignedPdfUploadRequest": {
+                "type": "object",
+                "properties": {
+                    "signed_pdf": {
+                        "type": "string",
+                        "format": "binary"
+                    }
+                },
+                "required": [
+                    "signed_pdf"
+                ]
+            },
+            "SignupRequest": {
+                "type": "object",
+                "properties": {
+                    "email": {
+                        "type": "string",
+                        "format": "email",
+                        "minLength": 1
+                    },
+                    "username": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 150
+                    },
+                    "password": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 8
+                    },
+                    "full_name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 255
+                    },
+                    "aadhaar": {
+                        "type": "string",
+                        "writeOnly": true,
+                        "minLength": 1
+                    }
+                },
+                "required": [
+                    "aadhaar",
+                    "email",
+                    "full_name",
+                    "password",
+                    "username"
+                ]
+            },
+            "SignupResponse": {
+                "type": "object",
+                "properties": {
+                    "token_id": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "token_id"
+                ]
+            },
+            "UserTypeEnum": {
+                "enum": [
+                    "applicant",
+                    "officer",
+                    "admin"
+                ],
+                "type": "string",
+                "description": "* `applicant` - Applicant\n* `officer` - Officer\n* `admin` - Admin"
+            },
+            "_Certificate": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "certificate_type": {
+                        "$ref": "#/components/schemas/CertificateTypeEnum"
+                    },
+                    "certificate_number": {
+                        "type": "string",
+                        "maxLength": 30
+                    },
+                    "signature_verified": {
+                        "type": "boolean"
+                    },
+                    "dsc_serial_used": {
+                        "type": "string",
+                        "maxLength": 128
+                    },
+                    "issued_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "valid_until": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "revoked_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "certificate_number",
+                    "certificate_type",
+                    "id",
+                    "issued_at"
+                ]
+            }
+        },
+        "securitySchemes": {
+            "cookieAuth": {
+                "type": "apiKey",
+                "in": "cookie",
+                "name": "sessionid"
+            }
+        }
+    }
+}
