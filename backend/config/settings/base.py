@@ -185,6 +185,11 @@ if B2_KEY_ID:
 
 DOCUMENT_MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB global cap; per-slot overrides deferred
 
+# ── DSC signing ───────────────────────────────────────────────────────────────
+# Path to the CCA trust-root DER file used to validate officer DSC signatures.
+# In dev/test, point at a placeholder; swap for real CCA root in production.
+DSC_TRUST_ROOT_PATH = env("DSC_TRUST_ROOT_PATH", default=str(BASE_DIR / "cca_trust_root.der"))
+
 # ── Email (Resend via SMTP) ───────────────────────────────────────────────────
 EMAIL_BACKEND = env(
     "EMAIL_BACKEND",

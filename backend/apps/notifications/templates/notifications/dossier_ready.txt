@@ -1,0 +1,11 @@
+Dear {{ applicant_name }},
+
+Your final dossier for application {{ application_number }} has been compiled and is now available on the MbPA Building Permission Portal.
+
+The dossier contains all certificates and documents associated with your application.
+
+Please log in to the portal to download your dossier.
+
+Regards,
+Mumbai Port Authority
+Building Permission Portal

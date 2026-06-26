@@ -153,6 +153,35 @@ def _assign_officer_for_sm(sm: StreamMilestone):
     return profile.user if profile else None
 
 
+_MILESTONE_CERT_MAP: dict[str, list[str]] = {
+    "S1": ["aip"],
+    "S2": ["development_permission", "commencement_plinth"],
+    "S3": ["further_commencement"],
+    "S4": ["commencement_80pct"],
+    "S5": ["commencement_rem20"],
+    "S6": ["building_completion"],
+    "OC": ["oc"],
+    "DEMO": ["demolition_clearance"],
+}
+
+
+def _issue_certificates_for_milestone(instance, stream_milestone, application, issued_by) -> None:
+    # Deferred imports to avoid circular apps.applications ↔ apps.certificates.
+    from apps.certificates.services import compile_final_dossier, generate_certificate
+
+    milestone_code = stream_milestone.milestone.code
+    cert_types = _MILESTONE_CERT_MAP.get(milestone_code, [])
+
+    if milestone_code == "DEMO" and application.stream.code != "reerection":
+        return
+
+    for cert_type in cert_types:
+        generate_certificate(application=application, cert_type=cert_type, issued_by=issued_by)
+
+    if milestone_code == "OC":
+        compile_final_dossier(application=application, triggered_by=issued_by)
+
+
 @transaction.atomic
 def transition_milestone(
     *,
@@ -245,6 +274,13 @@ def transition_milestone(
                 "sequence": current_sm.sequence,
                 "decision_note": decision_note,
             },
+        )
+
+        _issue_certificates_for_milestone(
+            instance=instance,
+            stream_milestone=current_sm,
+            application=application,
+            issued_by=acting_officer,
         )
 
         # Look for the next milestone in sequence.

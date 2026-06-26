@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from unittest.mock import patch
 
 import pytest
 from django.contrib.auth import get_user_model
@@ -299,12 +300,13 @@ def test_transition_approve_creates_next_milestone():
     instance1.assigned_officer = officer
     instance1.save(update_fields=["assigned_officer"])
 
-    transition_milestone(
-        milestone_instance_id=instance1.pk,
-        action="approve",
-        acting_officer=officer,
-        decision_note="Looks good",
-    )
+    with patch("apps.documents.services.default_storage"):
+        transition_milestone(
+            milestone_instance_id=instance1.pk,
+            action="approve",
+            acting_officer=officer,
+            decision_note="Looks good",
+        )
 
     instance1.refresh_from_db()
     assert instance1.status == MilestoneInstance.STATUS_APPROVED

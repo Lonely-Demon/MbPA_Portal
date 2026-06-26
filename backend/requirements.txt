@@ -23,6 +23,7 @@ django-csp==3.8.*
 # ── PDF / DSC signing ─────────────────────────────────────────────────────────
 pyHanko[image-support,opentype]==0.22.*
 pyhanko-certvalidator==0.26.*
+reportlab==4.*
 
 # ── Working-day calendar ──────────────────────────────────────────────────────
 holidays==0.46.*
