@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Least privilege: CI only needs to read the repo. Denies the default
+# write-capable GITHUB_TOKEN so a compromised step can't push or alter the repo.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend — lint / type-check / test

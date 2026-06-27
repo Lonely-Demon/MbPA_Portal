@@ -535,3 +535,36 @@ def test_axes_lockout_after_five_failed_logins():
     )
     # 403 = axes lockout, 429 = DRF ScopedRateThrottle — both mean the account is protected
     assert resp.status_code in (403, 429)
+
+
+# ── AADHAAR_PEPPER startup enforcement (D-5) ──────────────────────────────────
+
+
+def test_aadhaar_pepper_check_errors_when_unset_in_production():
+    """D-5: manage.py check must fail when AADHAAR_PEPPER is empty and DEBUG=False."""
+    from django.test import override_settings
+
+    from apps.identity.checks import aadhaar_pepper_configured
+
+    with override_settings(DEBUG=False, AADHAAR_PEPPER=""):
+        errors = aadhaar_pepper_configured(None)
+    assert [e.id for e in errors] == ["identity.E001"]
+
+
+def test_aadhaar_pepper_check_passes_when_set():
+    from django.test import override_settings
+
+    from apps.identity.checks import aadhaar_pepper_configured
+
+    with override_settings(DEBUG=False, AADHAAR_PEPPER="x" * 32):
+        assert aadhaar_pepper_configured(None) == []
+
+
+def test_aadhaar_pepper_check_silent_in_debug():
+    """An empty pepper in local dev (DEBUG=True) must not block startup."""
+    from django.test import override_settings
+
+    from apps.identity.checks import aadhaar_pepper_configured
+
+    with override_settings(DEBUG=True, AADHAAR_PEPPER=""):
+        assert aadhaar_pepper_configured(None) == []

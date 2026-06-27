@@ -140,10 +140,20 @@ SPECTACULAR_SETTINGS = {
     "COMPONENT_SPLIT_REQUEST": True,
 }
 
+# Whether to mount the live /api/schema/ + swagger routes. Off by default so they
+# are never exposed in production; local.py turns it on for frontend codegen.
+SERVE_API_SCHEMA = env.bool("SERVE_API_SCHEMA", default=False)
+
 # ── django-axes (brute-force protection) ─────────────────────────────────────
 AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 1  # hour
 AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+# Number of trusted reverse proxies in front of Django (nginx = 1; add the count
+# of any LB/CDN ahead of it). Without this, django-ipware honours the leftmost,
+# client-supplied X-Forwarded-For entry — letting an attacker spoof the IP to
+# bypass the lockout, or pin a victim's IP to lock them out. Counting from the
+# right, the (n+1)-th-from-right address is the real client. Override per-env.
+AXES_IPWARE_PROXY_COUNT = env.int("AXES_IPWARE_PROXY_COUNT", default=1)
 AUTHENTICATION_BACKENDS = [
     "axes.backends.AxesStandaloneBackend",
     "django.contrib.auth.backends.ModelBackend",
