@@ -375,6 +375,7 @@
         "/api/certificates/{application_number}/{id}/receive-signed/": {
             "post": {
                 "operationId": "certificates_receive_signed_create",
+                "description": "Officer-only: upload the signed PDF for a certificate (CRIT-2).",
                 "parameters": [
                     {
                         "in": "path",
@@ -431,6 +432,7 @@
         "/api/compliance/audit/{target_type}/{target_id}/": {
             "get": {
                 "operationId": "compliance_audit_list",
+                "description": "HIGH-1: Restrict audit trail access to admins and parties on the target application.",
                 "parameters": [
                     {
                         "in": "path",
@@ -2368,8 +2370,8 @@
             "LoginResponse": {
                 "type": "object",
                 "properties": {
-                    "token_id": {
-                        "type": "integer"
+                    "token_ref": {
+                        "type": "string"
                     },
                     "masked_email": {
                         "type": "string"
@@ -2377,7 +2379,7 @@
                 },
                 "required": [
                     "masked_email",
-                    "token_id"
+                    "token_ref"
                 ]
             },
             "LogoutResponse": {
@@ -2578,30 +2580,34 @@
             "OtpResendRequest": {
                 "type": "object",
                 "properties": {
-                    "token_id": {
-                        "type": "integer"
+                    "token_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 43
                     }
                 },
                 "required": [
-                    "token_id"
+                    "token_ref"
                 ]
             },
             "OtpResendResponse": {
                 "type": "object",
                 "properties": {
-                    "token_id": {
-                        "type": "integer"
+                    "token_ref": {
+                        "type": "string"
                     }
                 },
                 "required": [
-                    "token_id"
+                    "token_ref"
                 ]
             },
             "OtpVerifyRequest": {
                 "type": "object",
                 "properties": {
-                    "token_id": {
-                        "type": "integer"
+                    "token_ref": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 43
                     },
                     "code": {
                         "type": "string",
@@ -2611,7 +2617,7 @@
                 },
                 "required": [
                     "code",
-                    "token_id"
+                    "token_ref"
                 ]
             },
             "OtpVerifyResponse": {
@@ -2820,12 +2826,12 @@
             "SignupResponse": {
                 "type": "object",
                 "properties": {
-                    "token_id": {
-                        "type": "integer"
+                    "token_ref": {
+                        "type": "string"
                     }
                 },
                 "required": [
-                    "token_id"
+                    "token_ref"
                 ]
             },
             "StatusLookupResponse": {

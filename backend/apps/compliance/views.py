@@ -35,10 +35,30 @@ def _is_admin(user) -> bool:
 
 
 class AuditEventListView(APIView):
+    """HIGH-1: Restrict audit trail access to admins and parties on the target application."""
+
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses=AuditEventSerializer(many=True))
     def get(self, request, target_type, target_id):
+        user = request.user
+        if not (_is_admin(user)):
+            # For Application targets, verify the requester has access.
+            if target_type == "application":
+                try:
+                    app = Application.objects.get(pk=target_id)
+                except Application.DoesNotExist:
+                    return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+                if not (
+                    app.submitted_by_id == user.pk
+                    or app.parties.filter(user=user).exists()
+                    or app.milestone_instances.filter(assigned_officer=user).exists()
+                ):
+                    return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+            else:
+                # Non-application audit events are admin-only.
+                return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
         events = (
             AuditEvent.objects.filter(target_type=target_type, target_id=target_id)
             .select_related("actor")
@@ -98,17 +118,32 @@ class ComplaintDetailView(APIView):
         except Complaint.DoesNotExist:
             return None
 
+    def _can_access_complaint(self, user, complaint) -> bool:
+        """Raiser, assigned officer on the application, or admin."""
+        if _is_admin(user):
+            return True
+        if complaint.raised_by_id == user.pk:
+            return True
+        if (
+            complaint.application
+            and MilestoneInstance.objects.filter(
+                application=complaint.application, assigned_officer=user
+            ).exists()
+        ):
+            return True
+        return False
+
     @extend_schema(operation_id="complaints_retrieve", responses=ComplaintReadSerializer)
     def get(self, request, pk):
         complaint = self._get_complaint(pk)
-        if complaint is None:
+        if complaint is None or not self._can_access_complaint(request.user, complaint):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(ComplaintReadSerializer(complaint).data)
 
     @extend_schema(request=ComplaintResolveSerializer, responses=ComplaintReadSerializer)
     def patch(self, request, pk):
         complaint = self._get_complaint(pk)
-        if complaint is None:
+        if complaint is None or not self._can_access_complaint(request.user, complaint):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ser = ComplaintResolveSerializer(data=request.data)
@@ -126,15 +161,33 @@ class ComplaintDetailView(APIView):
         return Response(ComplaintReadSerializer(updated).data)
 
 
+def _can_access_app(user, app) -> bool:
+    """Check user has access to an Application (officer, party, admin)."""
+    if _is_admin(user):
+        return True
+    if app.submitted_by_id == user.pk:
+        return True
+    if app.parties.filter(user=user).exists():
+        return True
+    if app.milestone_instances.filter(assigned_officer=user).exists():
+        return True
+    return False
+
+
 class ConditionalClearanceListView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(responses=ConditionalClearanceReadSerializer(many=True))
     def get(self, request, application_number):
         try:
-            app = Application.objects.get(application_number=application_number)
+            app = Application.objects.get(
+                application_number=application_number, deleted_at__isnull=True
+            )
         except Application.DoesNotExist:
-            return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_access_app(request.user, app):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         clearances = (
             ConditionalClearance.objects.filter(application=app)
@@ -153,9 +206,14 @@ class ConditionalClearanceCreateView(APIView):
     )
     def post(self, request, application_number):
         try:
-            app = Application.objects.get(application_number=application_number)
+            app = Application.objects.get(
+                application_number=application_number, deleted_at__isnull=True
+            )
         except Application.DoesNotExist:
-            return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_access_app(request.user, app):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ser = ConditionalClearanceCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -279,6 +337,9 @@ class ConditionalClearanceFulfillView(APIView):
         try:
             clearance = ConditionalClearance.objects.select_related("application").get(pk=pk)
         except ConditionalClearance.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if clearance.application and not _can_access_app(request.user, clearance.application):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         ser = ConditionalClearanceFulfillSerializer(data=request.data)

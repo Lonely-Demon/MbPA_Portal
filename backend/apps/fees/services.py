@@ -292,6 +292,12 @@ def verify_payment(
             "only 'claimed' payments can be verified."
         )
 
+    # HIGH-2: Guard against an officer claiming VERIFIED while entering a
+    # different amount. The system enforces MISMATCH automatically so the
+    # decision field cannot mask a shortfall.
+    if decision == Payment.STATUS_VERIFIED and verified_amount != payment.assessment.total_amount:
+        decision = Payment.STATUS_MISMATCH
+
     payment.status = decision
     payment.verified_amount = verified_amount
     payment.verified_by = verified_by

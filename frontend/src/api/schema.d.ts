@@ -157,6 +157,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** @description Officer-only: upload the signed PDF for a certificate (CRIT-2). */
         post: operations["certificates_receive_signed_create"];
         delete?: never;
         options?: never;
@@ -171,6 +172,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /** @description HIGH-1: Restrict audit trail access to admins and parties on the target application. */
         get: operations["compliance_audit_list"];
         put?: never;
         post?: never;
@@ -841,7 +843,7 @@ export interface components {
             password: string;
         };
         LoginResponse: {
-            token_id: number;
+            token_ref: string;
             masked_email: string;
         };
         LogoutResponse: {
@@ -904,13 +906,13 @@ export interface components {
          */
         OriginEnum: "applicant_raised" | "system_raised";
         OtpResendRequest: {
-            token_id: number;
+            token_ref: string;
         };
         OtpResendResponse: {
-            token_id: number;
+            token_ref: string;
         };
         OtpVerifyRequest: {
-            token_id: number;
+            token_ref: string;
             code: string;
         };
         OtpVerifyResponse: {
@@ -982,7 +984,7 @@ export interface components {
             aadhaar: string;
         };
         SignupResponse: {
-            token_id: number;
+            token_ref: string;
         };
         StatusLookupResponse: {
             application_number: string;

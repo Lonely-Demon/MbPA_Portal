@@ -6,7 +6,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [tokenId, setTokenId] = useState<number | null>(null);
+  const [tokenRef, setTokenRef] = useState<string | null>(null);
   const [maskedEmail, setMaskedEmail] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export default function Login() {
         setError("Invalid credentials.");
         return;
       }
-      setTokenId(data.token_id);
+      setTokenRef(data.token_ref);
       setMaskedEmail(data.masked_email);
     } catch {
       setError("An unexpected error occurred.");
@@ -35,12 +35,12 @@ export default function Login() {
 
   async function handleOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (tokenId === null) return;
+    if (tokenRef === null) return;
     setError(null);
     setLoading(true);
     try {
       const { error: apiError } = await client.POST("/api/identity/otp/verify/", {
-        body: { token_id: tokenId, code: otpCode },
+        body: { token_ref: tokenRef, code: otpCode },
       });
       if (apiError) {
         setError("Invalid or expired code.");
@@ -54,7 +54,7 @@ export default function Login() {
     }
   }
 
-  if (tokenId !== null) {
+  if (tokenRef !== null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-paper">
         <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">

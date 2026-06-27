@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.fees.models import FeeAssessment, Payment
@@ -51,5 +53,7 @@ class PaymentVerifySerializer(serializers.Serializer):
         Payment.STATUS_MISMATCH,
     ]
     decision = serializers.ChoiceField(choices=DECISION_CHOICES)
-    verified_amount = serializers.DecimalField(max_digits=14, decimal_places=2)
+    verified_amount = serializers.DecimalField(
+        max_digits=14, decimal_places=2, min_value=Decimal("0.01")
+    )
     remarks = serializers.CharField(allow_blank=True, default="")

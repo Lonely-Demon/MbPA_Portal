@@ -222,10 +222,16 @@ class ApplicationSubmitView(APIView):
     def post(self, request, pk):
         from apps.common.exceptions import DomainError
 
+        # CRIT-3: Verify the requesting user owns this draft before submitting.
         try:
-            app = submit_application(application_id=pk, submitted_by=request.user)
+            app_obj = Application.objects.get(pk=pk, deleted_at__isnull=True)
         except Application.DoesNotExist:
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        if app_obj.submitted_by_id != request.user.pk:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            app = submit_application(application_id=pk, submitted_by=request.user)
         except DomainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(ApplicationReadSerializer(app).data)

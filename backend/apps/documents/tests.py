@@ -318,6 +318,7 @@ def test_document_slot_list_returns_slots_for_milestone_instance(client):
         application=app,
         stream_milestone=sm,
         status=MilestoneInstance.STATUS_IN_PROGRESS,
+        assigned_officer=user,
     )
 
     resp = client.get(f"/api/documents/slots/{mi.pk}/")

@@ -167,7 +167,7 @@ def test_otp_correct_code_succeeds():
         code_hash=__import__("hashlib").sha256(b"123456").hexdigest(),
         expires_at=timezone.now() + __import__("datetime").timedelta(minutes=10),
     )
-    result = verify_otp(token_id=token.pk, submitted_code="123456")
+    result = verify_otp(token_ref=token.token_ref, submitted_code="123456")
     assert result.consumed_at is not None
 
 
@@ -184,7 +184,7 @@ def test_otp_wrong_code_increments_attempt_count():
         expires_at=timezone.now() + datetime.timedelta(minutes=10),
     )
     with pytest.raises(Exception):
-        verify_otp(token_id=token.pk, submitted_code="000000")
+        verify_otp(token_ref=token.token_ref, submitted_code="000000")
     token.refresh_from_db()
     assert token.attempt_count == 1
 
@@ -203,10 +203,10 @@ def test_otp_attempt_cap_raises_exceeded_error():
     )
     for _ in range(2):
         with pytest.raises(Exception):
-            verify_otp(token_id=token.pk, submitted_code="000000")
+            verify_otp(token_ref=token.token_ref, submitted_code="000000")
 
     with pytest.raises(OtpAttemptsExceededError):
-        verify_otp(token_id=token.pk, submitted_code="000000")
+        verify_otp(token_ref=token.token_ref, submitted_code="000000")
 
 
 @pytest.mark.django_db
@@ -222,7 +222,7 @@ def test_otp_expired_token_raises():
         expires_at=timezone.now() - datetime.timedelta(minutes=1),
     )
     with pytest.raises(OtpExpiredError):
-        verify_otp(token_id=token.pk, submitted_code="123456")
+        verify_otp(token_ref=token.token_ref, submitted_code="123456")
 
 
 @pytest.mark.django_db
@@ -239,7 +239,7 @@ def test_otp_consumed_token_raises():
         consumed_at=timezone.now(),
     )
     with pytest.raises(OtpExpiredError):
-        verify_otp(token_id=token.pk, submitted_code="123456")
+        verify_otp(token_ref=token.token_ref, submitted_code="123456")
 
 
 @pytest.mark.django_db
@@ -256,7 +256,7 @@ def test_otp_attempt_count_persists_after_wrong_code():
         expires_at=timezone.now() + datetime.timedelta(minutes=10),
     )
     with pytest.raises(Exception):
-        verify_otp(token_id=token.pk, submitted_code="111111")
+        verify_otp(token_ref=token.token_ref, submitted_code="111111")
 
     token.refresh_from_db()
     assert token.attempt_count == 1  # Increment persisted despite exception
@@ -424,7 +424,7 @@ def test_login_serializer_no_extra_fields():
 
 
 def test_otp_verify_serializer_no_extra_fields():
-    allowed = {"token_id", "code"}
+    allowed = {"token_ref", "code"}
     ser = OtpVerifySerializer()
     assert set(ser.fields.keys()) == allowed
 
@@ -460,7 +460,7 @@ def test_login_view_correct_credentials_issues_otp():
         format="json",
     )
     assert resp.status_code == 200
-    assert "token_id" in resp.data
+    assert "token_ref" in resp.data
     assert "masked_email" in resp.data
 
 

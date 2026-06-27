@@ -22,10 +22,22 @@ class DocumentSlotListView(APIView):
     @extend_schema(responses=DocumentSlotReadSerializer(many=True))
     def get(self, request, milestone_instance_id):
         try:
-            mi = MilestoneInstance.objects.select_related("stream_milestone").get(
+            mi = MilestoneInstance.objects.select_related("stream_milestone", "application").get(
                 pk=milestone_instance_id
             )
         except MilestoneInstance.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # CRIT-4: Confirm the requesting user has access to the underlying application.
+        app = mi.application
+        user = request.user
+        if not (
+            app.submitted_by_id == user.pk
+            or app.parties.filter(user=user).exists()
+            or app.milestone_instances.filter(assigned_officer=user).exists()
+            or user.is_staff
+            or getattr(user, "user_type", "") == "admin"
+        ):
             return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         slots = DocumentSlot.objects.filter(stream_milestone=mi.stream_milestone).select_related(
@@ -53,7 +65,9 @@ class DocumentUploadView(APIView):
         mi_id = ser.validated_data.get("milestone_instance_id")
         milestone_instance = None
         if mi_id:
-            milestone_instance = MilestoneInstance.objects.filter(pk=mi_id).first()
+            milestone_instance = (
+                MilestoneInstance.objects.select_related("application").filter(pk=mi_id).first()
+            )
 
         application = None
         if milestone_instance:
@@ -74,6 +88,17 @@ class DocumentUploadView(APIView):
                 {"detail": "Cannot determine application: provide milestone_instance_id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # CRIT-4: Verify the uploading user has access to this application.
+        user = request.user
+        if not (
+            application.submitted_by_id == user.pk
+            or application.parties.filter(user=user).exists()
+            or application.milestone_instances.filter(assigned_officer=user).exists()
+            or user.is_staff
+            or getattr(user, "user_type", "") == "admin"
+        ):
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
 
         doc = upload_document(
             application=application,

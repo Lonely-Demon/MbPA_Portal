@@ -84,9 +84,19 @@ def request_otp(*, email: str, purpose: str, user: User | None = None) -> OtpTok
     """
     Issue a new OTP token for the given email + purpose, invalidating any
     unconsumed prior token for the same combination.
+
+    CRIT-5: The cumulative attempt_count from any superseded token is carried
+    forward into prior_attempt_count on the new token, so resending an OTP
+    does not reset the brute-force cap.
     """
     from apps.notifications.services import send_email
 
+    prior_attempts = (
+        OtpToken.objects.filter(email=email, purpose=purpose, consumed_at__isnull=True)
+        .values_list("attempt_count", "prior_attempt_count")
+        .first()
+    )
+    cumulative = sum(prior_attempts) if prior_attempts else 0
     OtpToken.objects.filter(email=email, purpose=purpose, consumed_at__isnull=True).delete()
 
     code = f"{secrets.randbelow(1_000_000):06d}"
@@ -98,6 +108,7 @@ def request_otp(*, email: str, purpose: str, user: User | None = None) -> OtpTok
         purpose=purpose,
         code_hash=_hash_code(code),
         expires_at=expires_at,
+        prior_attempt_count=cumulative,
     )
 
     template_map = {
@@ -112,9 +123,14 @@ def request_otp(*, email: str, purpose: str, user: User | None = None) -> OtpTok
     return token
 
 
-def verify_otp(*, token_id: int, submitted_code: str) -> OtpToken:
+def verify_otp(*, token_ref: str, submitted_code: str) -> OtpToken:
     """
     Verify a submitted OTP code against the stored hash.
+
+    CRIT-6: token_ref is an opaque URL-safe string (not the integer PK), so
+    clients cannot enumerate tokens by incrementing an ID.
+    CRIT-5: The cap is checked against attempt_count + prior_attempt_count so
+    resending an OTP does not reset the brute-force window.
 
     The attempt count is always persisted, even when the code is wrong, so
     brute-force is correctly capped (AC-06). Raising happens OUTSIDE the
@@ -126,7 +142,7 @@ def verify_otp(*, token_id: int, submitted_code: str) -> OtpToken:
 
     with transaction.atomic():
         try:
-            token = OtpToken.objects.select_for_update().get(pk=token_id)
+            token = OtpToken.objects.select_for_update().get(token_ref=token_ref)
         except OtpToken.DoesNotExist:
             raise DomainError("Invalid OTP token.") from None
 
@@ -136,7 +152,8 @@ def verify_otp(*, token_id: int, submitted_code: str) -> OtpToken:
         if token.expires_at < now:
             raise OtpExpiredError("OTP has expired.")
 
-        if token.attempt_count >= settings.OTP_MAX_ATTEMPTS:
+        total_attempts = token.attempt_count + token.prior_attempt_count
+        if total_attempts >= settings.OTP_MAX_ATTEMPTS:
             raise OtpAttemptsExceededError("Too many incorrect attempts.")
 
         is_correct = hmac.compare_digest(_hash_code(submitted_code), token.code_hash)
@@ -147,7 +164,8 @@ def verify_otp(*, token_id: int, submitted_code: str) -> OtpToken:
             token.consumed_at = now
             token.save(update_fields=["consumed_at"])
         else:
-            exceeded = token.attempt_count >= settings.OTP_MAX_ATTEMPTS
+            total = token.attempt_count + token.prior_attempt_count
+            exceeded = total >= settings.OTP_MAX_ATTEMPTS
             wrong_code = True
 
     # Raise outside the atomic block so the attempt-count commit is not rolled back

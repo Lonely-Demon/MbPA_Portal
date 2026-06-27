@@ -32,7 +32,7 @@ class SignupView(APIView):
             201: inline_serializer(
                 "SignupResponse",
                 {
-                    "token_id": drf_serializers.IntegerField(),
+                    "token_ref": drf_serializers.CharField(),
                 },
             )
         },
@@ -48,7 +48,7 @@ class SignupView(APIView):
             full_name=d["full_name"],
             aadhaar_raw=d["aadhaar"],
         )
-        return Response({"token_id": token.pk}, status=status.HTTP_201_CREATED)
+        return Response({"token_ref": token.token_ref}, status=status.HTTP_201_CREATED)
 
 
 class LoginView(APIView):
@@ -61,7 +61,7 @@ class LoginView(APIView):
             200: inline_serializer(
                 "LoginResponse",
                 {
-                    "token_id": drf_serializers.IntegerField(),
+                    "token_ref": drf_serializers.CharField(),
                     "masked_email": drf_serializers.CharField(),
                 },
             )
@@ -96,7 +96,7 @@ class LoginView(APIView):
         )
         local, domain = authenticated.email.split("@", 1)
         masked = f"{local[:3]}***@{domain}"
-        return Response({"token_id": token.pk, "masked_email": masked})
+        return Response({"token_ref": token.token_ref, "masked_email": masked})
 
 
 class OtpVerifyView(APIView):
@@ -119,7 +119,7 @@ class OtpVerifyView(APIView):
         ser.is_valid(raise_exception=True)
         d = ser.validated_data
 
-        token = verify_otp(token_id=d["token_id"], submitted_code=d["code"])
+        token = verify_otp(token_ref=d["token_ref"], submitted_code=d["code"])
 
         if token.user and token.purpose in (
             OtpToken.PURPOSE_LOGIN,
@@ -140,7 +140,7 @@ class OtpResendView(APIView):
             200: inline_serializer(
                 "OtpResendResponse",
                 {
-                    "token_id": drf_serializers.IntegerField(),
+                    "token_ref": drf_serializers.CharField(),
                 },
             )
         },
@@ -148,10 +148,10 @@ class OtpResendView(APIView):
     def post(self, request):
         ser = OtpResendSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
-        token_id = ser.validated_data["token_id"]
+        token_ref = ser.validated_data["token_ref"]
 
         try:
-            old = OtpToken.objects.get(pk=token_id, consumed_at__isnull=True)
+            old = OtpToken.objects.get(token_ref=token_ref, consumed_at__isnull=True)
         except OtpToken.DoesNotExist:
             return Response(
                 {"detail": "Token not found or already used."},
@@ -159,7 +159,7 @@ class OtpResendView(APIView):
             )
 
         new_token = request_otp(email=old.email, purpose=old.purpose, user=old.user)
-        return Response({"token_id": new_token.pk})
+        return Response({"token_ref": new_token.token_ref})
 
 
 @extend_schema_view(

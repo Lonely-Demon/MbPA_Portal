@@ -19,12 +19,12 @@ class LoginRequestSerializer(serializers.Serializer):
 
 
 class OtpVerifySerializer(serializers.Serializer):
-    token_id = serializers.IntegerField()
+    token_ref = serializers.CharField(max_length=43)
     code = serializers.CharField(min_length=6, max_length=6)
 
 
 class OtpResendSerializer(serializers.Serializer):
-    token_id = serializers.IntegerField()
+    token_ref = serializers.CharField(max_length=43)
 
 
 class MeSerializer(serializers.ModelSerializer):

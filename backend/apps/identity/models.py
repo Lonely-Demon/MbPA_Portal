@@ -1,3 +1,5 @@
+import secrets
+
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
@@ -98,7 +100,17 @@ class OtpToken(models.Model):
     email = models.EmailField(blank=True)
     purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
     code_hash = models.CharField(max_length=64)  # SHA-256 of 6-digit code
+    # CRIT-6: opaque reference returned to the client instead of the integer PK
+    # so sequential enumeration of token IDs is not possible.
+    token_ref = models.CharField(
+        max_length=43,
+        unique=True,
+        default=lambda: secrets.token_urlsafe(32),
+    )
     attempt_count = models.PositiveSmallIntegerField(default=0)
+    # CRIT-5: carry forward the attempt count from a superseded token so that
+    # requesting a new OTP does not reset the brute-force cap.
+    prior_attempt_count = models.PositiveSmallIntegerField(default=0)
     expires_at = models.DateTimeField()
     consumed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -43,7 +43,7 @@ export default function Signup() {
     existing_bua_sqm: "",
     zonal_rrr: "",
   });
-  const [tokenId, setTokenId] = useState<number | null>(null);
+  const [tokenRef, setTokenRef] = useState<string | null>(null);
   const [otpCode, setOtpCode] = useState("");
   const [draftId, setDraftId] = useState<number | null>(null);
   const [streams, setStreams] = useState<StreamListItem[]>([]);
@@ -85,7 +85,7 @@ export default function Signup() {
         setError(detail);
         return;
       }
-      setTokenId(resp.token_id);
+      setTokenRef(resp.token_ref);
       setStep(2);
     } catch {
       setError("An unexpected error occurred.");
@@ -96,12 +96,12 @@ export default function Signup() {
 
   async function handleOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (!tokenId) return;
+    if (!tokenRef) return;
     setError(null);
     setSubmitting(true);
     try {
       const { error: apiError } = await client.POST("/api/identity/otp/verify/", {
-        body: { token_id: tokenId, code: otpCode },
+        body: { token_ref: tokenRef, code: otpCode },
       });
       if (apiError) {
         setError("Invalid or expired OTP. Please try again.");
@@ -116,13 +116,13 @@ export default function Signup() {
   }
 
   async function handleResend() {
-    if (!tokenId) return;
+    if (!tokenRef) return;
     setResendMsg(null);
     const { data: resp } = await client.POST("/api/identity/otp/resend/", {
-      body: { token_id: tokenId },
+      body: { token_ref: tokenRef },
     });
     if (resp) {
-      setTokenId(resp.token_id);
+      setTokenRef(resp.token_ref);
       setResendMsg("A new OTP has been sent to your email.");
     }
   }
