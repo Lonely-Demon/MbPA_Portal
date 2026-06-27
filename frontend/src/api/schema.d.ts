@@ -260,6 +260,41 @@ export interface paths {
         patch: operations["compliance_complaints_partial_update"];
         trace?: never;
     };
+    "/api/compliance/erasure-requests/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description AC-32: DPDP erasure requests. Anyone may request erasure of their own data. */
+        get: operations["erasure_requests_list"];
+        put?: never;
+        /** @description AC-32: DPDP erasure requests. Anyone may request erasure of their own data. */
+        post: operations["compliance_erasure_requests_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/compliance/erasure-requests/{id}/process/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** @description AC-32: admin completes or rejects a pending erasure request. */
+        patch: operations["compliance_erasure_requests_process_partial_update"];
+        trace?: never;
+    };
     "/api/csrf/": {
         parameters: {
             query?: never;
@@ -732,6 +767,34 @@ export interface components {
             /** Format: uri */
             url: string;
         };
+        ErasureRequestCreateRequest: {
+            subject_id?: number | null;
+            /** @default  */
+            reason: string;
+        };
+        ErasureRequestRead: {
+            readonly id: number;
+            subject: number;
+            requested_by?: number | null;
+            reason?: string;
+            status?: components["schemas"]["ErasureRequestReadStatusEnum"];
+            /** Format: date-time */
+            readonly requested_at: string;
+            /** Format: date-time */
+            due_at: string;
+            /** Format: date-time */
+            processed_at?: string | null;
+            processed_by?: number | null;
+            resolution_notes?: string;
+            readonly is_overdue: boolean;
+        };
+        /**
+         * @description * `pending` - Pending
+         *     * `completed` - Completed
+         *     * `rejected` - Rejected
+         * @enum {string}
+         */
+        ErasureRequestReadStatusEnum: "pending" | "completed" | "rejected";
         FeeAssessmentRead: {
             readonly id: number;
             /** Format: decimal */
@@ -858,6 +921,11 @@ export interface components {
         };
         PatchedConditionalClearanceFulfillRequest: {
             clearance_doc_id?: number;
+        };
+        PatchedErasureRequestProcessRequest: {
+            approve?: boolean;
+            /** @default  */
+            resolution_notes: string;
         };
         PatchedPaymentVerifyRequest: {
             decision?: components["schemas"]["DecisionEnum"];
@@ -1413,6 +1481,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ComplaintRead"];
+                };
+            };
+        };
+    };
+    erasure_requests_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErasureRequestRead"][];
+                };
+            };
+        };
+    };
+    compliance_erasure_requests_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ErasureRequestCreateRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["ErasureRequestCreateRequest"];
+                "multipart/form-data": components["schemas"]["ErasureRequestCreateRequest"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErasureRequestRead"];
+                };
+            };
+        };
+    };
+    compliance_erasure_requests_process_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedErasureRequestProcessRequest"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedErasureRequestProcessRequest"];
+                "multipart/form-data": components["schemas"]["PatchedErasureRequestProcessRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErasureRequestRead"];
                 };
             };
         };

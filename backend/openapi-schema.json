@@ -779,6 +779,133 @@
                 }
             }
         },
+        "/api/compliance/erasure-requests/": {
+            "get": {
+                "operationId": "erasure_requests_list",
+                "description": "AC-32: DPDP erasure requests. Anyone may request erasure of their own data.",
+                "tags": [
+                    "compliance"
+                ],
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/ErasureRequestRead"
+                                    }
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "compliance_erasure_requests_create",
+                "description": "AC-32: DPDP erasure requests. Anyone may request erasure of their own data.",
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ErasureRequestCreateRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ErasureRequestCreateRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ErasureRequestCreateRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErasureRequestRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/compliance/erasure-requests/{id}/process/": {
+            "patch": {
+                "operationId": "compliance_erasure_requests_process_partial_update",
+                "description": "AC-32: admin completes or rejects a pending erasure request.",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "compliance"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedErasureRequestProcessRequest"
+                            }
+                        },
+                        "application/x-www-form-urlencoded": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedErasureRequestProcessRequest"
+                            }
+                        },
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/PatchedErasureRequestProcessRequest"
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "cookieAuth": []
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ErasureRequestRead"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/csrf/": {
             "get": {
                 "operationId": "csrf_retrieve",
@@ -2016,6 +2143,82 @@
                     "url"
                 ]
             },
+            "ErasureRequestCreateRequest": {
+                "type": "object",
+                "properties": {
+                    "subject_id": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "reason": {
+                        "type": "string",
+                        "default": ""
+                    }
+                }
+            },
+            "ErasureRequestRead": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "readOnly": true
+                    },
+                    "subject": {
+                        "type": "integer"
+                    },
+                    "requested_by": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ErasureRequestReadStatusEnum"
+                    },
+                    "requested_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "readOnly": true
+                    },
+                    "due_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "processed_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "processed_by": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "resolution_notes": {
+                        "type": "string"
+                    },
+                    "is_overdue": {
+                        "type": "boolean",
+                        "readOnly": true
+                    }
+                },
+                "required": [
+                    "due_at",
+                    "id",
+                    "is_overdue",
+                    "requested_at",
+                    "subject"
+                ]
+            },
+            "ErasureRequestReadStatusEnum": {
+                "enum": [
+                    "pending",
+                    "completed",
+                    "rejected"
+                ],
+                "type": "string",
+                "description": "* `pending` - Pending\n* `completed` - Completed\n* `rejected` - Rejected"
+            },
             "FeeAssessmentRead": {
                 "type": "object",
                 "properties": {
@@ -2436,6 +2639,18 @@
                 "properties": {
                     "clearance_doc_id": {
                         "type": "integer"
+                    }
+                }
+            },
+            "PatchedErasureRequestProcessRequest": {
+                "type": "object",
+                "properties": {
+                    "approve": {
+                        "type": "boolean"
+                    },
+                    "resolution_notes": {
+                        "type": "string",
+                        "default": ""
                     }
                 }
             },

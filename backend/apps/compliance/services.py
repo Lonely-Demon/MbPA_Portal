@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from apps.common.exceptions import DomainError
 
-from .models import AuditEvent, Complaint, ConditionalClearance
+from .models import AuditEvent, Complaint, ConditionalClearance, ErasureRequest
 
 User = get_user_model()
 
@@ -181,6 +181,156 @@ def create_conditional_clearance(
         },
     )
     return clearance
+
+
+# ── DPDP erasure services (AC-32) ─────────────────────────────────────────────
+
+# Application statuses that represent an in-flight statutory process; while any
+# exist for the subject, the underlying PII must be retained (lawful exception to
+# erasure under DPDP) and the request is rejected rather than completed.
+_ACTIVE_APPLICATION_STATUSES = (
+    "draft",
+    "submitted",
+    "under_scrutiny",
+    "awaiting_next_milestone",
+)
+
+
+@transaction.atomic
+def create_erasure_request(*, subject, requested_by, reason: str = "") -> ErasureRequest:
+    """
+    Lodge a DPDP erasure request. ``due_at`` is set to the statutory response
+    window (RESPONSE_WINDOW_DAYS) from now so overdue requests are queryable.
+    """
+    now = timezone.now()
+    req = ErasureRequest.objects.create(
+        subject=subject,
+        requested_by=requested_by,
+        reason=reason,
+        status=ErasureRequest.STATUS_PENDING,
+        due_at=now + timedelta(days=ErasureRequest.RESPONSE_WINDOW_DAYS),
+    )
+    record_audit_event(
+        verb="erasure.requested",
+        target_type="ErasureRequest",
+        target_id=req.pk,
+        actor=requested_by,
+        payload={
+            "subject_id": subject.pk,
+            "due_at": req.due_at.isoformat(),
+        },
+    )
+    return req
+
+
+def _subject_has_active_applications(subject) -> bool:
+    """True if the subject owns or is a party to any in-flight application."""
+    from apps.applications.models import Application, ApplicationParty
+
+    if Application.objects.filter(
+        submitted_by=subject, status__in=_ACTIVE_APPLICATION_STATUSES
+    ).exists():
+        return True
+    return ApplicationParty.objects.filter(
+        user=subject, application__status__in=_ACTIVE_APPLICATION_STATUSES
+    ).exists()
+
+
+def _anonymise_subject(subject) -> None:
+    """
+    Scrub the subject's PII in place. Retains the User and ApplicantProfile rows
+    (FKs from Applications/AuditEvent are PROTECT) but removes identifying data.
+    """
+    from apps.identity.models import ApplicantProfile
+
+    ApplicantProfile.objects.filter(user=subject).update(
+        full_name="[ERASED]",
+        pan_number="",
+        aadhaar_hash="",
+        aadhaar_last4="",
+        address="",
+    )
+
+    subject.first_name = ""
+    subject.last_name = ""
+    subject.email = f"erased.user.{subject.pk}@erased.invalid"
+    subject.username = f"erased_user_{subject.pk}"
+    subject.mobile = ""
+    subject.is_mobile_verified = False
+    subject.is_active = False
+    subject.set_unusable_password()
+    subject.save(
+        update_fields=[
+            "first_name",
+            "last_name",
+            "email",
+            "username",
+            "mobile",
+            "is_mobile_verified",
+            "is_active",
+            "password",
+        ]
+    )
+
+    # Invalidate any outstanding OTP tokens for the subject.
+    from apps.identity.models import OtpToken
+
+    OtpToken.objects.filter(user=subject, consumed_at__isnull=True).update(
+        consumed_at=timezone.now()
+    )
+
+
+@transaction.atomic
+def process_erasure_request(
+    *, erasure_request: ErasureRequest, processed_by, approve: bool, resolution_notes: str = ""
+) -> ErasureRequest:
+    """
+    Complete or reject a pending erasure request.
+
+    On approval: refuses (rejects) if the subject has active applications whose
+    data must be retained for the ongoing statutory process; otherwise anonymises
+    the subject's PII and marks the request completed. Either outcome is audited.
+    """
+    if erasure_request.status != ErasureRequest.STATUS_PENDING:
+        raise DomainError("Erasure request is already processed.")
+
+    subject = erasure_request.subject
+    now = timezone.now()
+
+    if approve and _subject_has_active_applications(subject):
+        raise DomainError(
+            "Cannot erase: subject has active applications whose data must be "
+            "retained for the ongoing statutory process (DPDP lawful-retention "
+            "exception). Reject the request with this reason, or wait until the "
+            "applications reach a terminal state."
+        )
+
+    if approve:
+        _anonymise_subject(subject)
+        erasure_request.status = ErasureRequest.STATUS_COMPLETED
+        verb = "erasure.completed"
+    else:
+        erasure_request.status = ErasureRequest.STATUS_REJECTED
+        verb = "erasure.rejected"
+
+    erasure_request.processed_at = now
+    erasure_request.processed_by = processed_by
+    erasure_request.resolution_notes = resolution_notes
+    erasure_request.save(
+        update_fields=["status", "processed_at", "processed_by", "resolution_notes"]
+    )
+
+    record_audit_event(
+        verb=verb,
+        target_type="ErasureRequest",
+        target_id=erasure_request.pk,
+        actor=processed_by,
+        payload={
+            "subject_id": subject.pk,
+            "resolution_notes": resolution_notes,
+        },
+    )
+    return erasure_request
 
 
 @transaction.atomic

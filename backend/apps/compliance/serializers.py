@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.compliance.models import AuditEvent, Complaint, ConditionalClearance
+from apps.compliance.models import AuditEvent, Complaint, ConditionalClearance, ErasureRequest
 
 
 class AuditEventSerializer(serializers.ModelSerializer):
@@ -74,3 +74,34 @@ class ConditionalClearanceCreateSerializer(serializers.Serializer):
 
 class ConditionalClearanceFulfillSerializer(serializers.Serializer):
     clearance_doc_id = serializers.IntegerField()
+
+
+class ErasureRequestReadSerializer(serializers.ModelSerializer):
+    is_overdue = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = ErasureRequest
+        fields = [
+            "id",
+            "subject",
+            "requested_by",
+            "reason",
+            "status",
+            "requested_at",
+            "due_at",
+            "processed_at",
+            "processed_by",
+            "resolution_notes",
+            "is_overdue",
+        ]
+
+
+class ErasureRequestCreateSerializer(serializers.Serializer):
+    # Optional: an admin may file on another user's behalf. Omitted ⇒ self-request.
+    subject_id = serializers.IntegerField(required=False, allow_null=True)
+    reason = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class ErasureRequestProcessSerializer(serializers.Serializer):
+    approve = serializers.BooleanField()
+    resolution_notes = serializers.CharField(required=False, allow_blank=True, default="")

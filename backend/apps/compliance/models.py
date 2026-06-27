@@ -149,6 +149,81 @@ class AuditEvent(models.Model):
         raise ValidationError("AuditEvent rows are permanent — deletion is forbidden.")
 
 
+class ErasureRequest(models.Model):
+    """
+    AC-32 — DPDP Act erasure (right-to-be-forgotten) request.
+
+    DPDP Rule 14 grants the Data Principal a statutory response window. We record
+    ``due_at = requested_at + RESPONSE_WINDOW_DAYS`` so an overdue request is
+    queryable and reportable.
+
+    Erasure here means *anonymisation* of the subject's PII, not row deletion:
+    Applications, fee assessments, certificates, and the append-only AuditEvent
+    log are retained as legally required, while the ApplicantProfile's identifying
+    fields are scrubbed. A request may be rejected when an active statutory process
+    (an in-flight application) requires the data to be retained.
+    """
+
+    RESPONSE_WINDOW_DAYS = 90
+
+    STATUS_PENDING = "pending"
+    STATUS_COMPLETED = "completed"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    # The Data Principal whose data is to be erased.
+    subject = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="erasure_requests",
+    )
+    # Who lodged the request (usually the subject themselves; an admin may file
+    # on their behalf). Kept separate from `subject` for audit clarity.
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="filed_erasure_requests",
+    )
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    requested_at = models.DateTimeField(auto_now_add=True)
+    # Statutory deadline = requested_at + RESPONSE_WINDOW_DAYS, set in the service.
+    due_at = models.DateTimeField()
+    processed_at = models.DateTimeField(null=True, blank=True)
+    processed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="processed_erasure_requests",
+    )
+    # Officer note on completion, or the reason an erasure was lawfully refused.
+    resolution_notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "compliance_erasure_request"
+        indexes = [
+            models.Index(fields=["status", "due_at"]),
+            models.Index(fields=["subject", "status"]),
+        ]
+        ordering = ["-requested_at"]
+
+    def __str__(self):
+        return f"ErasureRequest({self.subject_id}, {self.status})"
+
+    @property
+    def is_overdue(self) -> bool:
+        from django.utils import timezone
+
+        return self.status == self.STATUS_PENDING and timezone.now() > self.due_at
+
+
 class Holiday(models.Model):
     """Public / bank holiday calendar used by SLA working-day calculations."""
 

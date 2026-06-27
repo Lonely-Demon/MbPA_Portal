@@ -217,3 +217,29 @@ CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com")
 CSP_IMG_SRC = ("'self'", "data:")
 CSP_CONNECT_SRC = ("'self'",)
 CSP_FRAME_ANCESTORS = ("'none'",)
+
+# ── Logging (AC-31: sensitive-data redaction backstop) ────────────────────────
+# The SensitiveDataFilter is attached to every handler so raw Aadhaar numbers,
+# OTP codes, passwords, and secrets are masked before they reach any sink — in
+# dev, test, and production alike. production.py overrides handlers/formatters
+# but reuses this same filter.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "redact_sensitive": {
+            "()": "apps.common.logging.SensitiveDataFilter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "filters": ["redact_sensitive"],
+        },
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "django": {"handlers": ["console"], "level": "WARNING", "propagate": False},
+        "apps": {"handlers": ["console"], "level": "INFO", "propagate": False},
+    },
+}

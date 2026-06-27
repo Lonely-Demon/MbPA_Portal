@@ -13,6 +13,16 @@ urlpatterns = [
     path("complaints/", views.ComplaintListCreateView.as_view(), name="complaint-list-create"),
     path("complaints/<int:pk>/", views.ComplaintDetailView.as_view(), name="complaint-detail"),
     path(
+        "erasure-requests/",
+        views.ErasureRequestListCreateView.as_view(),
+        name="erasure-list-create",
+    ),
+    path(
+        "erasure-requests/<int:pk>/process/",
+        views.ErasureRequestProcessView.as_view(),
+        name="erasure-process",
+    ),
+    path(
         "clearances/<str:application_number>/",
         views.ConditionalClearanceListView.as_view(),
         name="clearance-list",

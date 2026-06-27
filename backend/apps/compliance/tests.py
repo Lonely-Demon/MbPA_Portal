@@ -627,3 +627,158 @@ def test_fulfill_clearance_records_doc_evidence():
     updated.refresh_from_db()
     assert updated.is_fulfilled
     assert updated.clearance_doc_id == doc.pk
+
+
+# ── ErasureRequest / DPDP erasure (AC-32) ─────────────────────────────────────
+
+
+def _make_applicant_with_profile(username="erasure_subject"):
+    from apps.identity.models import ApplicantProfile
+
+    user = User.objects.create_user(
+        username=username, password="testpass123", email=f"{username}@example.com"
+    )
+    ApplicantProfile.objects.create(
+        user=user,
+        full_name="Real Name",
+        pan_number="ABCDE1234F",
+        aadhaar_hash="a" * 64,
+        aadhaar_last4="1234",
+        address="221B Baker Street",
+    )
+    return user
+
+
+@pytest.mark.django_db
+def test_create_erasure_request_sets_due_window_and_audits():
+    from apps.compliance.models import ErasureRequest
+    from apps.compliance.services import create_erasure_request
+
+    subject = _make_applicant_with_profile("erase_due")
+    req = create_erasure_request(subject=subject, requested_by=subject, reason="please erase")
+
+    assert req.status == ErasureRequest.STATUS_PENDING
+    delta = req.due_at - req.requested_at
+    assert abs(delta.days - ErasureRequest.RESPONSE_WINDOW_DAYS) <= 1
+    assert AuditEvent.objects.filter(
+        verb="erasure.requested", target_type="ErasureRequest", target_id=req.pk
+    ).exists()
+
+
+@pytest.mark.django_db
+def test_process_erasure_request_anonymises_subject():
+    from apps.compliance.models import ErasureRequest
+    from apps.compliance.services import create_erasure_request, process_erasure_request
+    from apps.identity.models import ApplicantProfile
+
+    subject = _make_applicant_with_profile("erase_ok")
+    admin = User.objects.create_user(username="erase_admin", password="x", is_staff=True)
+
+    # A terminal application does not block erasure.
+    stream = _make_stream("erase_stream_done")
+    Application.objects.create(
+        stream=stream,
+        submitted_by=subject,
+        status=Application.STATUS_APPROVED,
+        application_number="MBPASPA20269001",
+    )
+
+    req = create_erasure_request(subject=subject, requested_by=subject)
+    updated = process_erasure_request(
+        erasure_request=req, processed_by=admin, approve=True, resolution_notes="done"
+    )
+
+    assert updated.status == ErasureRequest.STATUS_COMPLETED
+    assert updated.processed_by_id == admin.pk
+
+    profile = ApplicantProfile.objects.get(user=subject)
+    assert profile.full_name == "[ERASED]"
+    assert profile.pan_number == ""
+    assert profile.aadhaar_hash == ""
+    assert profile.aadhaar_last4 == ""
+    assert profile.address == ""
+
+    subject.refresh_from_db()
+    assert subject.is_active is False
+    assert subject.email == f"erased.user.{subject.pk}@erased.invalid"
+    assert subject.username == f"erased_user_{subject.pk}"
+    assert not subject.has_usable_password()
+
+    assert AuditEvent.objects.filter(verb="erasure.completed", target_id=req.pk).exists()
+
+
+@pytest.mark.django_db
+def test_process_erasure_request_blocked_by_active_application():
+    from apps.common.exceptions import DomainError
+    from apps.compliance.services import create_erasure_request, process_erasure_request
+    from apps.identity.models import ApplicantProfile
+
+    subject = _make_applicant_with_profile("erase_active")
+    admin = User.objects.create_user(username="erase_admin2", password="x", is_staff=True)
+
+    stream = _make_stream("erase_stream_active")
+    Application.objects.create(
+        stream=stream,
+        submitted_by=subject,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269002",
+    )
+
+    req = create_erasure_request(subject=subject, requested_by=subject)
+    with pytest.raises(DomainError, match="active applications"):
+        process_erasure_request(erasure_request=req, processed_by=admin, approve=True)
+
+    # PII must remain intact when erasure is blocked.
+    profile = ApplicantProfile.objects.get(user=subject)
+    assert profile.full_name == "Real Name"
+
+
+@pytest.mark.django_db
+def test_process_erasure_request_reject_keeps_pii():
+    from apps.compliance.models import ErasureRequest
+    from apps.compliance.services import create_erasure_request, process_erasure_request
+    from apps.identity.models import ApplicantProfile
+
+    subject = _make_applicant_with_profile("erase_reject")
+    admin = User.objects.create_user(username="erase_admin3", password="x", is_staff=True)
+
+    req = create_erasure_request(subject=subject, requested_by=subject)
+    updated = process_erasure_request(
+        erasure_request=req,
+        processed_by=admin,
+        approve=False,
+        resolution_notes="legal hold",
+    )
+
+    assert updated.status == ErasureRequest.STATUS_REJECTED
+    profile = ApplicantProfile.objects.get(user=subject)
+    assert profile.full_name == "Real Name"
+    assert AuditEvent.objects.filter(verb="erasure.rejected", target_id=req.pk).exists()
+
+
+@pytest.mark.django_db
+def test_process_erasure_request_double_process_raises():
+    from apps.common.exceptions import DomainError
+    from apps.compliance.services import create_erasure_request, process_erasure_request
+
+    subject = _make_applicant_with_profile("erase_double")
+    admin = User.objects.create_user(username="erase_admin4", password="x", is_staff=True)
+
+    req = create_erasure_request(subject=subject, requested_by=subject)
+    process_erasure_request(erasure_request=req, processed_by=admin, approve=True)
+    with pytest.raises(DomainError, match="already processed"):
+        process_erasure_request(erasure_request=req, processed_by=admin, approve=True)
+
+
+@pytest.mark.django_db
+def test_erasure_request_overdue_property():
+    from apps.compliance.services import create_erasure_request
+
+    subject = _make_applicant_with_profile("erase_overdue")
+    req = create_erasure_request(subject=subject, requested_by=subject)
+    assert req.is_overdue is False
+
+    # Force the deadline into the past.
+    req.due_at = timezone.now() - timedelta(days=1)
+    req.save(update_fields=["due_at"])
+    assert req.is_overdue is True

@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 
 from apps.applications.models import Application, MilestoneInstance
 from apps.common.exceptions import DomainError
-from apps.compliance.models import AuditEvent, Complaint, ConditionalClearance
+from apps.compliance.models import AuditEvent, Complaint, ConditionalClearance, ErasureRequest
 from apps.compliance.serializers import (
     AuditEventSerializer,
     ComplaintCreateSerializer,
@@ -15,14 +15,23 @@ from apps.compliance.serializers import (
     ConditionalClearanceCreateSerializer,
     ConditionalClearanceFulfillSerializer,
     ConditionalClearanceReadSerializer,
+    ErasureRequestCreateSerializer,
+    ErasureRequestProcessSerializer,
+    ErasureRequestReadSerializer,
 )
 from apps.compliance.services import (
     create_conditional_clearance,
+    create_erasure_request,
     fulfill_clearance,
+    process_erasure_request,
     raise_applicant_complaint,
     resolve_complaint,
 )
 from apps.documents.models import DocumentUpload
+
+
+def _is_admin(user) -> bool:
+    return bool(getattr(user, "user_type", None) == "admin" or user.is_staff or user.is_superuser)
 
 
 class AuditEventListView(APIView):
@@ -173,6 +182,90 @@ class ConditionalClearanceCreateView(APIView):
         return Response(
             ConditionalClearanceReadSerializer(clearance).data, status=status.HTTP_201_CREATED
         )
+
+
+class ErasureRequestListCreateView(APIView):
+    """AC-32: DPDP erasure requests. Anyone may request erasure of their own data."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="erasure_requests_list", responses=ErasureRequestReadSerializer(many=True)
+    )
+    def get(self, request):
+        # Admins see all requests; ordinary users see only their own.
+        if _is_admin(request.user):
+            qs = ErasureRequest.objects.all()
+        else:
+            qs = ErasureRequest.objects.filter(subject=request.user)
+        qs = qs.select_related("subject", "requested_by", "processed_by")
+        return Response(ErasureRequestReadSerializer(qs, many=True).data)
+
+    @extend_schema(
+        request=ErasureRequestCreateSerializer, responses={201: ErasureRequestReadSerializer}
+    )
+    def post(self, request):
+        ser = ErasureRequestCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        subject_id = ser.validated_data.get("subject_id")
+        # Filing for another subject is an admin-only action; default is self.
+        if subject_id and subject_id != request.user.pk:
+            if not _is_admin(request.user):
+                return Response(
+                    {"detail": "Only an admin may file an erasure request for another user."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            from apps.identity.models import User
+
+            try:
+                subject = User.objects.get(pk=subject_id)
+            except User.DoesNotExist:
+                return Response(
+                    {"detail": "Subject user not found."}, status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            subject = request.user
+
+        req = create_erasure_request(
+            subject=subject,
+            requested_by=request.user,
+            reason=ser.validated_data.get("reason", ""),
+        )
+        return Response(ErasureRequestReadSerializer(req).data, status=status.HTTP_201_CREATED)
+
+
+class ErasureRequestProcessView(APIView):
+    """AC-32: admin completes or rejects a pending erasure request."""
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(request=ErasureRequestProcessSerializer, responses=ErasureRequestReadSerializer)
+    def patch(self, request, pk):
+        if not _is_admin(request.user):
+            return Response(
+                {"detail": "Only an admin may process erasure requests."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        try:
+            req = ErasureRequest.objects.select_related("subject").get(pk=pk)
+        except ErasureRequest.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        ser = ErasureRequestProcessSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+
+        try:
+            updated = process_erasure_request(
+                erasure_request=req,
+                processed_by=request.user,
+                approve=ser.validated_data["approve"],
+                resolution_notes=ser.validated_data.get("resolution_notes", ""),
+            )
+        except DomainError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(ErasureRequestReadSerializer(updated).data)
 
 
 class ConditionalClearanceFulfillView(APIView):

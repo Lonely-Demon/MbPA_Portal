@@ -27,9 +27,16 @@ CSRF_TRUSTED_ORIGINS = env.list("CSRF_TRUSTED_ORIGINS", default=[])
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
+# AC-31: the redact_sensitive filter is attached to every handler so no raw
+# Aadhaar / OTP / password / secret can reach the log sink, even via tracebacks.
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "redact_sensitive": {
+            "()": "apps.common.logging.SensitiveDataFilter",
+        },
+    },
     "formatters": {
         "json": {
             "()": "django.utils.log.ServerFormatter",
@@ -40,6 +47,7 @@ LOGGING = {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
+            "filters": ["redact_sensitive"],
         },
     },
     "root": {"handlers": ["console"], "level": "WARNING"},

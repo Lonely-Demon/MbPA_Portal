@@ -83,7 +83,7 @@ def submit_application(*, application_id: int, submitted_by: User) -> Applicatio
     assigned_officer is set to the first active officer with the required role;
     if none exists it is left NULL (normal on a fresh environment).
     """
-    from apps.compliance.services import compute_due_at
+    from apps.compliance.services import compute_due_at, record_audit_event
     from apps.identity.models import OfficerProfile
 
     application = Application.objects.select_for_update().get(pk=application_id)
@@ -100,6 +100,17 @@ def submit_application(*, application_id: int, submitted_by: User) -> Applicatio
     application.status = Application.STATUS_SUBMITTED
     application.submitted_at = now
     application.save(update_fields=["application_number", "status", "submitted_at"])
+
+    record_audit_event(
+        verb="application.submitted",
+        target_type="Application",
+        target_id=application.pk,
+        actor=submitted_by,
+        payload={
+            "application_number": application.application_number,
+            "stream": application.stream.code,
+        },
+    )
 
     # Create the first milestone instance for this stream's sequence=1 milestone.
     try:

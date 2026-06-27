@@ -930,3 +930,63 @@ def test_application_submit_assigns_number():
     number = response.json()["application_number"]
     assert number != ""
     assert number.startswith("MBPASPA")
+
+
+# ── AC-29 strict sequencing across ALL real seeded streams ────────────────────
+
+# The seven production stream codes from seed_reference_data.SEQUENCES.
+_REAL_STREAM_CODES = [
+    "new_building",
+    "addition",
+    "layout",
+    "reerection",
+    "temporary",
+    "special",
+    "regularise",
+]
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("stream_code", _REAL_STREAM_CODES)
+def test_strict_sequencing_blocks_out_of_order_on_real_stream(stream_code):
+    """
+    AC-29 (parametrized): for every real seeded stream, acting on the sequence=2
+    milestone while sequence=1 is still IN_PROGRESS must raise — exercising each
+    stream's actual milestone subset, not a synthetic two-step stream.
+    """
+    from django.core.management import call_command
+
+    from apps.applications.exceptions import InvalidTransitionError
+    from apps.applications.services import transition_milestone
+
+    call_command("seed_reference_data", verbosity=0)
+
+    officer = _make_officer(f"officer_seq_{stream_code}")
+    user = _make_user(f"owner_seq_{stream_code}")
+
+    stream = Stream.objects.get(code=stream_code)
+    sm2 = StreamMilestone.objects.select_related("milestone").get(stream=stream, sequence=2)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    # sequence=1 instance exists from submit and is still IN_PROGRESS.
+    instance1 = MilestoneInstance.objects.get(application=app, stream_milestone__sequence=1)
+    assert instance1.status == MilestoneInstance.STATUS_IN_PROGRESS
+
+    # Manually stand up the sequence=2 instance (skipping seq=1 clearance).
+    instance2 = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm2,
+        assigned_officer=officer,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        started_at=None,
+        due_at=None,
+    )
+
+    with pytest.raises(InvalidTransitionError, match="prior-sequence"):
+        transition_milestone(
+            milestone_instance_id=instance2.pk,
+            action="approve",
+            acting_officer=officer,
+        )
