@@ -64,8 +64,13 @@ def redact_sensitive(text: str) -> str:
         quote = match.group("quote")
         return f"{match.group(1)}{match.group(2)}{quote}{REDACTED}{quote}"
 
-    text = _KV_RE.sub(_kv, text)
+    # Order matters: redact grouped Aadhaar numbers FIRST. _KV_RE's value capture
+    # stops at the first whitespace, so on "aadhaar=1234 5678 9012" it would consume
+    # only "1234" and leave " 5678 9012" as plain text that the (already-run) bare-
+    # Aadhaar pass can no longer recognise. Running _AADHAAR_RE first consumes the
+    # whole grouped number before _KV_RE can split it.
     text = _AADHAAR_RE.sub(REDACTED, text)
+    text = _KV_RE.sub(_kv, text)
     return text
 
 

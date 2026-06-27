@@ -26,6 +26,21 @@ def test_redact_aadhaar_bare_number():
     assert REDACTED in redact_sensitive("id=1234-1234-1234")
 
 
+def test_redact_grouped_aadhaar_in_kv_no_partial_leak():
+    """
+    Regression: a space-grouped Aadhaar in key=value form next to another secret
+    must be fully masked. _KV_RE's value capture stops at whitespace, so unless
+    the grouped-number pass runs first, only the first group ("1234") is consumed
+    and the trailing 8 digits leak. Assert NO digit run from the Aadhaar survives.
+    """
+    raw = "aadhaar=1234 5678 9012 password=hunter2"
+    out = redact_sensitive(raw)
+    for fragment in ("1234", "5678", "9012", "567890129012", "5678 9012"):
+        assert fragment not in out, f"partial Aadhaar {fragment!r} leaked: {out!r}"
+    assert "hunter2" not in out
+    assert REDACTED in out
+
+
 def test_redact_keyed_secrets():
     for raw, secret in [
         ("password=hunter2", "hunter2"),
@@ -80,6 +95,34 @@ def test_filter_scrubs_exception_traceback():
     SensitiveDataFilter().filter(rec)
     assert rec.exc_text is not None
     assert "123412341234" not in rec.exc_text
+    assert REDACTED in rec.exc_text
+
+
+def test_filter_scrubs_grouped_aadhaar_in_traceback():
+    """
+    Regression for the exact AC-31 scenario: an uncaught exception whose message
+    carries a SPACE-GROUPED Aadhaar next to a password. Both must be fully masked
+    in the traceback text — no trailing 8-digit remainder.
+    """
+    import sys
+
+    try:
+        aadhaar = "1234 5678 9012"
+        password = "hunter2"
+        raise ValueError(f"intake failed: aadhaar={aadhaar} password={password}")
+    except ValueError:
+        rec = logging.LogRecord(
+            name="apps.test",
+            level=logging.ERROR,
+            pathname=__file__,
+            lineno=1,
+            msg="unhandled",
+            args=(),
+            exc_info=sys.exc_info(),
+        )
+    SensitiveDataFilter().filter(rec)
+    for fragment in ("5678", "9012", "5678 9012", "hunter2"):
+        assert fragment not in rec.exc_text, f"{fragment!r} leaked in traceback: {rec.exc_text}"
     assert REDACTED in rec.exc_text
 
 
