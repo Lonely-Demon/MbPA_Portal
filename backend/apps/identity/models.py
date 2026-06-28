@@ -4,6 +4,10 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 
 
+def _generate_token_ref():
+    return secrets.token_urlsafe(32)
+
+
 class User(AbstractUser):
     USER_TYPE_APPLICANT = "applicant"
     USER_TYPE_OFFICER = "officer"
@@ -105,7 +109,7 @@ class OtpToken(models.Model):
     token_ref = models.CharField(
         max_length=43,
         unique=True,
-        default=lambda: secrets.token_urlsafe(32),
+        default=_generate_token_ref,
     )
     attempt_count = models.PositiveSmallIntegerField(default=0)
     # CRIT-5: carry forward the attempt count from a superseded token so that

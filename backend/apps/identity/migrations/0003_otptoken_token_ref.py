@@ -21,6 +21,8 @@ import secrets
 
 from django.db import migrations, models
 
+import apps.identity.models
+
 
 def _populate_token_ref(apps, schema_editor):
     OtpToken = apps.get_model("identity", "OtpToken")
@@ -50,7 +52,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 max_length=43,
                 unique=True,
-                default=lambda: secrets.token_urlsafe(32),
+                default=apps.identity.models._generate_token_ref,
             ),
         ),
         # prior_attempt_count is new with a safe default — single step is fine
