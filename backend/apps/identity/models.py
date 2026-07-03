@@ -1,9 +1,11 @@
-import hashlib
-import hmac
+import secrets
 
-from django.conf import settings
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+
+
+def _generate_token_ref():
+    return secrets.token_urlsafe(32)
 
 
 class User(AbstractUser):
@@ -16,7 +18,9 @@ class User(AbstractUser):
         (USER_TYPE_ADMIN, "Admin"),
     ]
 
-    user_type = models.CharField(max_length=10, choices=USER_TYPE_CHOICES, default=USER_TYPE_APPLICANT)
+    user_type = models.CharField(
+        max_length=10, choices=USER_TYPE_CHOICES, default=USER_TYPE_APPLICANT
+    )
     mobile = models.CharField(max_length=15, blank=True)
     is_mobile_verified = models.BooleanField(default=False)
 
@@ -75,19 +79,44 @@ class OfficerProfile(models.Model):
 
 
 class OtpToken(models.Model):
-    """Short-lived OTP; rows are hard-deleted after verification or expiry."""
+    """
+    Short-lived OTP. consumed_at distinguishes "already used" from "expired"
+    from "wrong code" — required for AC-06 attempt-capping logic.
+    user is nullable to support signup OTPs issued before a User row exists.
+    """
+
     PURPOSE_LOGIN = "login"
+    PURPOSE_SIGNUP = "signup"
     PURPOSE_MOBILE_VERIFY = "mobile_verify"
     PURPOSE_CHOICES = [
         (PURPOSE_LOGIN, "Login"),
+        (PURPOSE_SIGNUP, "Signup"),
         (PURPOSE_MOBILE_VERIFY, "Mobile Verify"),
     ]
 
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otp_tokens")
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="otp_tokens",
+        null=True,
+        blank=True,
+    )
+    email = models.EmailField(blank=True)
     purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES)
     code_hash = models.CharField(max_length=64)  # SHA-256 of 6-digit code
+    # CRIT-6: opaque reference returned to the client instead of the integer PK
+    # so sequential enumeration of token IDs is not possible.
+    token_ref = models.CharField(
+        max_length=43,
+        unique=True,
+        default=_generate_token_ref,
+    )
     attempt_count = models.PositiveSmallIntegerField(default=0)
+    # CRIT-5: carry forward the attempt count from a superseded token so that
+    # requesting a new OTP does not reset the brute-force cap.
+    prior_attempt_count = models.PositiveSmallIntegerField(default=0)
     expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

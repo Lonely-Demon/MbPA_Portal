@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+# Least privilege: CI only needs to read the repo. Denies the default
+# write-capable GITHUB_TOKEN so a compromised step can't push or alter the repo.
+permissions:
+  contents: read
+
 jobs:
   backend:
     name: Backend — lint / type-check / test
@@ -45,6 +50,9 @@ jobs:
           python-version: "3.12"
           cache: pip
 
+      - name: Install system dependencies
+        run: sudo apt-get install -y libmagic1
+
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
@@ -55,11 +63,23 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy
+        # continue-on-error: tracked deliberate state — not a passing gate yet.
+        # Remove once all app modules have stub coverage.
         run: mypy --config-file ../pyproject.toml .
-        continue-on-error: true  # remove once stubs are fully typed
+        continue-on-error: true
 
-      - name: Check migrations are up to date
+      - name: Apply migrations
+        run: python manage.py migrate
+
+      - name: Check no unapplied migrations
+        # migrate --check verifies every migration file has been applied.
         run: python manage.py migrate --check
+
+      - name: Check no unmigrated model changes
+        # makemigrations --check verifies no model change exists without a migration file.
+        # These two checks are complementary: --check on migrate catches unapplied files;
+        # --check on makemigrations catches missing files entirely.
+        run: python manage.py makemigrations --check --dry-run
 
       - name: Django system check
         run: python manage.py check

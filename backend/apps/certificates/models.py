@@ -9,18 +9,31 @@ class Certificate(models.Model):
     Issued certificates. Rows are NEVER deleted (statutory permanence).
     Revocation is recorded via revoked_at; the row and R2 object are retained.
     """
-    TYPE_BUILDING_PERMISSION = "building_permission"
-    TYPE_COMMENCEMENT = "commencement"
-    TYPE_PLINTH = "plinth"
+
+    TYPE_AIP = "aip"
+    TYPE_DEVELOPMENT_PERM = "development_permission"
+    TYPE_COMMENCEMENT_PLINTH = "commencement_plinth"
+    TYPE_FURTHER_COMMENCEMENT = "further_commencement"
+    TYPE_COMMENCEMENT_80PCT = "commencement_80pct"
+    TYPE_COMMENCEMENT_REM20 = "commencement_rem20"
+    TYPE_BUILDING_COMPLETION = "building_completion"
     TYPE_OC = "oc"
+    TYPE_DEMOLITION_CLEARANCE = "demolition_clearance"
     TYPE_CHOICES = [
-        (TYPE_BUILDING_PERMISSION, "Building Permission Certificate"),
-        (TYPE_COMMENCEMENT, "Commencement Certificate"),
-        (TYPE_PLINTH, "Plinth Completion Certificate"),
+        (TYPE_AIP, "Approval in Principle"),
+        (TYPE_DEVELOPMENT_PERM, "Development Permission"),
+        (TYPE_COMMENCEMENT_PLINTH, "Commencement Certificate to Plinth"),
+        (TYPE_FURTHER_COMMENCEMENT, "Further Commencement Certificate"),
+        (TYPE_COMMENCEMENT_80PCT, "Commencement Certificate (80% BUA)"),
+        (TYPE_COMMENCEMENT_REM20, "Commencement Certificate (Remaining 20%)"),
+        (TYPE_BUILDING_COMPLETION, "Building Completion Certificate"),
         (TYPE_OC, "Occupancy Certificate"),
+        (TYPE_DEMOLITION_CLEARANCE, "Demolition & Site Clearance Certificate"),
     ]
 
-    application = models.ForeignKey(Application, on_delete=models.PROTECT, related_name="certificates")
+    application = models.ForeignKey(
+        Application, on_delete=models.PROTECT, related_name="certificates"
+    )
     certificate_type = models.CharField(max_length=25, choices=TYPE_CHOICES)
     certificate_number = models.CharField(max_length=30, unique=True)
 
@@ -38,7 +51,10 @@ class Certificate(models.Model):
 
     revoked_at = models.DateTimeField(null=True, blank=True)
     revoked_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="revoked_certificates",
     )
     revocation_reason = models.TextField(blank=True)

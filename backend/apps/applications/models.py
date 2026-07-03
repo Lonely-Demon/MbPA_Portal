@@ -1,9 +1,11 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class Stream(models.Model):
     """One of the 7 permission streams (e.g. New Construction, Demolition, etc.)."""
+
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -18,6 +20,7 @@ class Stream(models.Model):
 
 class Milestone(models.Model):
     """A named review stage that exists independent of any stream (e.g. S1-RDO, S2, OC)."""
+
     code = models.CharField(max_length=20, unique=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -32,11 +35,15 @@ class Milestone(models.Model):
 
 class StreamMilestone(models.Model):
     """Ordered mapping of milestones within a stream."""
+
     stream = models.ForeignKey(Stream, on_delete=models.CASCADE, related_name="stream_milestones")
-    milestone = models.ForeignKey(Milestone, on_delete=models.PROTECT, related_name="stream_milestones")
+    milestone = models.ForeignKey(
+        Milestone, on_delete=models.PROTECT, related_name="stream_milestones"
+    )
     sequence = models.PositiveSmallIntegerField()
-    # OC (S7) is NEVER auto-cleared; all other milestones may use deemed clearance
-    deemed_clearance_eligible = models.BooleanField(default=True)
+    # Safe default: opt-IN to deemed clearance by explicitly setting True.
+    # Omitting this field always produces the safe (non-clearable) state.
+    deemed_clearance_eligible = models.BooleanField(default=False)
     required_officer_role = models.CharField(max_length=20, blank=True)
 
     class Meta:
@@ -50,6 +57,7 @@ class ApplicationCounter(models.Model):
     Gapless sequence table per year. Rows are locked with select_for_update()
     before incrementing — never use F() updates here; the lock IS the primitive.
     """
+
     year = models.PositiveSmallIntegerField()
     prefix = models.CharField(max_length=20, default="MBPASPA")
     next_value = models.PositiveIntegerField(default=1)
@@ -85,7 +93,9 @@ class Application(models.Model):
     submitted_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="submitted_applications"
     )
-    status = models.CharField(max_length=30, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True)
+    status = models.CharField(
+        max_length=30, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True
+    )
 
     # Plot / land-plan details
     plpn = models.CharField(max_length=50, blank=True, verbose_name="Plot/Land Plan Number")
@@ -119,6 +129,7 @@ class Application(models.Model):
 
 class ApplicationParty(models.Model):
     """Additional parties on an application (architect, co-owner, legal rep, etc.)."""
+
     ROLE_ARCHITECT = "architect"
     ROLE_STRUCTURAL_ENGINEER = "structural_engineer"
     ROLE_CO_OWNER = "co_owner"
@@ -132,11 +143,14 @@ class ApplicationParty(models.Model):
 
     application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="parties")
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="application_parties",
-        null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="application_parties",
+        null=True,
+        blank=True,
     )
     party_role = models.CharField(max_length=25, choices=ROLE_CHOICES)
-    # True for the primary applicant account only; enforced via partial unique constraint in migration
+    # True for the primary applicant account only; enforced via partial unique index in migration
     is_account_of_record = models.BooleanField(default=False)
     name = models.CharField(max_length=255, blank=True)
     email = models.EmailField(blank=True)
@@ -145,15 +159,28 @@ class ApplicationParty(models.Model):
 
     class Meta:
         db_table = "applications_party"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["application"],
+                condition=Q(is_account_of_record=True),
+                name="one_account_of_record_per_app",
+            )
+        ]
 
 
 class MilestoneInstance(models.Model):
     """One occurrence of a StreamMilestone in the lifecycle of an Application."""
-    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="milestone_instances")
+
+    application = models.ForeignKey(
+        Application, on_delete=models.CASCADE, related_name="milestone_instances"
+    )
     stream_milestone = models.ForeignKey(StreamMilestone, on_delete=models.PROTECT)
     # Officer assigned at the time this milestone was created; SET_NULL if officer is deactivated
     assigned_officer = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="assigned_milestones",
     )
     STATUS_PENDING = "pending"

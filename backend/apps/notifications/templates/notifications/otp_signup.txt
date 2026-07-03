@@ -1,0 +1,7 @@
+Welcome to MbPA Portal. Your email verification code is: {{ code }}
+
+This code expires in 10 minutes. Enter it to complete your registration.
+
+If you did not create this account, you can safely ignore this email.
+
+Mumbai Port Authority Special Planning Authority

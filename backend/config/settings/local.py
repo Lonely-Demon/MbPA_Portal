@@ -1,8 +1,8 @@
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 INTERNAL_IPS = ["127.0.0.1"]
 
@@ -22,3 +22,9 @@ SECURE_SSL_REDIRECT = False
 # Relax CSP for local development
 CSP_DEFAULT_SRC = ("'self'", "localhost:*")
 CSP_SCRIPT_SRC = ("'self'", "'unsafe-eval'", "localhost:*")
+
+# Expose the OpenAPI schema + Swagger UI locally for `npm run generate:api`.
+SERVE_API_SCHEMA = True
+
+# Single dev server, no proxy in front — let ipware read REMOTE_ADDR directly.
+AXES_IPWARE_PROXY_COUNT = 0

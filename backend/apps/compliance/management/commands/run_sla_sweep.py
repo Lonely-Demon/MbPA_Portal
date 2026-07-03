@@ -7,12 +7,15 @@ Cron entry (example):
 For each in-progress MilestoneInstance whose due_at has passed and whose
 StreamMilestone is deemed_clearance_eligible, this command:
   1. Marks the instance as deemed-cleared.
-  2. Advances the application to the next milestone.
-  3. Writes an AuditEvent.
+  2. Writes an AuditEvent.
 
-S7/OC is NEVER auto-cleared — the StreamMilestone.deemed_clearance_eligible=False
-guard ensures this even if cron fires erroneously.
+S7/OC is NEVER auto-cleared — two independent guards enforce this:
+  Layer 1 (DB flag): stream_milestone__deemed_clearance_eligible=True in queryset.
+  Layer 2 (hardcoded): OC_NEVER_DEEMED_CODES check inside the loop, which fires
+    even if the flag is wrong in the database (data corruption, missed migration,
+    admin edit). This is the AC-18 redundancy from the build plan.
 """
+
 import logging
 
 from django.core.management.base import BaseCommand
@@ -20,9 +23,13 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.applications.models import MilestoneInstance
-from apps.compliance.services import record_audit_event
+from apps.compliance.services import raise_system_complaint, record_audit_event
 
 logger = logging.getLogger("apps")
+
+# Milestone codes that must NEVER be auto-cleared regardless of the DB flag.
+# Update this set when new permanent-review milestones are added to the domain.
+OC_NEVER_DEEMED_CODES: frozenset[str] = frozenset({"OC"})
 
 
 class Command(BaseCommand):
@@ -30,8 +37,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         now = timezone.now()
+        # Layer 1: filter by the DB flag.
         overdue = MilestoneInstance.objects.select_related(
-            "stream_milestone", "application"
+            "stream_milestone__milestone", "application"
         ).filter(
             status=MilestoneInstance.STATUS_IN_PROGRESS,
             due_at__lt=now,
@@ -39,7 +47,24 @@ class Command(BaseCommand):
         )
 
         cleared = 0
+        skipped_protected = 0
         for instance in overdue:
+            milestone_code = instance.stream_milestone.milestone.code
+
+            # Layer 2: hardcoded guard independent of the DB flag.
+            # If this fires, the DB flag is wrong — log loudly and skip.
+            if milestone_code in OC_NEVER_DEEMED_CODES:
+                logger.error(
+                    "SLA sweep: milestone %s (pk=%s) has deemed_clearance_eligible=True "
+                    "but its code %r is in OC_NEVER_DEEMED_CODES — flag mismatch detected. "
+                    "Refusing to auto-clear. Fix the StreamMilestone row immediately.",
+                    milestone_code,
+                    instance.stream_milestone.pk,
+                    milestone_code,
+                )
+                skipped_protected += 1
+                continue
+
             try:
                 with transaction.atomic():
                     instance.status = MilestoneInstance.STATUS_DEEMED
@@ -53,19 +78,37 @@ class Command(BaseCommand):
                         target_id=instance.pk,
                         payload={
                             "application": instance.application.application_number,
-                            "milestone": instance.stream_milestone.milestone.code,
+                            "milestone": milestone_code,
                             "due_at": instance.due_at.isoformat(),
                             "cleared_at": now.isoformat(),
                         },
                     )
+                    raise_system_complaint(
+                        application=instance.application,
+                        subject=f"Milestone {milestone_code} auto-cleared after SLA breach",
+                        body=(
+                            f"MilestoneInstance (pk={instance.pk}) for application "
+                            f"{instance.application.application_number} was deemed-cleared "
+                            f"on {now.date()} after SLA due date passed without officer action."
+                        ),
+                    )
                 cleared += 1
             except Exception as exc:
                 logger.error(
-                    "SLA sweep failed for MilestoneInstance %s: %s", instance.pk, exc,
+                    "SLA sweep failed for MilestoneInstance %s: %s",
+                    instance.pk,
+                    exc,
                     exc_info=True,
                 )
 
         self.stdout.write(
-            self.style.SUCCESS(f"SLA sweep complete: {cleared} instance(s) deemed-cleared.")
+            self.style.SUCCESS(
+                f"SLA sweep complete: {cleared} deemed-cleared, "
+                f"{skipped_protected} protected milestone(s) skipped."
+            )
         )
-        logger.info("SLA sweep complete: %d instance(s) deemed-cleared.", cleared)
+        logger.info(
+            "SLA sweep complete: %d deemed-cleared, %d protected skipped.",
+            cleared,
+            skipped_protected,
+        )
