@@ -331,12 +331,13 @@ export default function Signup() {
                 </label>
                 <input
                   id="signup-otp"
-                  type="text"
+                  type="password"
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   required
                   pattern="\d{6}"
                   inputMode="numeric"
+                  autoComplete="one-time-code"
                   autoFocus
                   className={inputCls}
                   placeholder="000000"

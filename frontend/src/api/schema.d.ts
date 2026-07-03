@@ -898,6 +898,11 @@ export interface components {
             /** Format: date-time */
             due_at: string;
             document_count: number;
+            /**
+             * @description True only when approving this instance would be the application's
+             *     last milestone — i.e. there is no further stage to advance to.
+             */
+            readonly is_final_step: boolean;
         };
         /**
          * @description * `applicant_raised` - Applicant Raised

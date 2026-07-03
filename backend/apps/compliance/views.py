@@ -92,8 +92,22 @@ class ComplaintListCreateView(APIView):
         ser.is_valid(raise_exception=True)
 
         try:
-            app = Application.objects.get(pk=ser.validated_data["application_id"])
+            app = Application.objects.get(
+                pk=ser.validated_data["application_id"], deleted_at__isnull=True
+            )
         except Application.DoesNotExist:
+            return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # An applicant-origin complaint may only be raised by the account of
+        # record or a co-party on the application — otherwise any authenticated
+        # user could file a complaint against a stranger's application by ID.
+        user = request.user
+        if not (
+            app.submitted_by_id == user.pk
+            or app.parties.filter(user=user).exists()
+            or user.is_staff
+            or getattr(user, "user_type", "") == "admin"
+        ):
             return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
 
         try:

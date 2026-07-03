@@ -72,3 +72,9 @@ class OfficerQueueItemSerializer(serializers.Serializer):
     started_at = serializers.DateTimeField()
     due_at = serializers.DateTimeField()
     document_count = serializers.IntegerField()
+    is_final_step = serializers.SerializerMethodField()
+
+    def get_is_final_step(self, obj) -> bool:
+        """True only when approving this instance would be the application's
+        last milestone — i.e. there is no further stage to advance to."""
+        return obj.stream_milestone.sequence >= obj.stream_max_sequence

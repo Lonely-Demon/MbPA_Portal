@@ -295,12 +295,21 @@ class OfficerQueueView(APIView):
 
     @extend_schema(responses=OfficerQueueItemSerializer(many=True))
     def get(self, request):
-        from django.db.models import Count, Q
+        from django.db.models import Count, OuterRef, Q, Subquery
 
+        # Mirrors the PoC's isFinalStep: lets the console say "final approval"
+        # instead of "next stage" without the client guessing from sequence
+        # numbers it would otherwise have to fetch separately.
+        max_sequence_in_stream = (
+            StreamMilestone.objects.filter(stream_id=OuterRef("stream_milestone__stream_id"))
+            .order_by("-sequence")
+            .values("sequence")[:1]
+        )
         qs = officer_queue(request.user).annotate(
             document_count=Count(
                 "application__documents",
                 filter=Q(application__documents__is_deleted=False),
-            )
+            ),
+            stream_max_sequence=Subquery(max_sequence_in_stream),
         )
         return Response(OfficerQueueItemSerializer(qs, many=True).data)
