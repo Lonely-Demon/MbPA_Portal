@@ -839,6 +839,62 @@ def test_officer_queue_includes_document_count():
 
 
 @pytest.mark.django_db
+def test_officer_queue_is_final_step_true_for_single_stage_stream():
+    """A stream with only one StreamMilestone: that instance is the final step."""
+    from rest_framework.test import APIClient
+
+    officer = _make_officer("final_oq_officer")
+    user = _make_user("final_oq_owner")
+    stream = _make_stream("final_oq_stream")
+    ms = _make_milestone("FINALOQ_S1", sla_days=5)
+    _make_stream_milestone(stream, ms, sequence=1)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    client = APIClient()
+    client.force_authenticate(user=officer)
+    data = client.get("/api/officer/queue/").json()
+
+    assert len(data) == 1
+    assert data[0]["is_final_step"] is True
+
+
+@pytest.mark.django_db
+def test_officer_queue_is_final_step_false_for_earlier_stage():
+    """A stream with two StreamMilestones: the sequence=1 instance created at
+    submission is not the final step (sequence=2 is)."""
+    from rest_framework.test import APIClient
+
+    officer = _make_officer("nonfinal_oq_officer")
+    user = _make_user("nonfinal_oq_owner")
+    stream = _make_stream("nonfinal_oq_stream")
+    ms1 = _make_milestone("NONFINALOQ_S1", sla_days=5)
+    ms2 = _make_milestone("NONFINALOQ_S2", sla_days=5)
+    _make_stream_milestone(stream, ms1, sequence=1)
+    _make_stream_milestone(stream, ms2, sequence=2)
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app)
+    instance.assigned_officer = officer
+    instance.save(update_fields=["assigned_officer"])
+
+    client = APIClient()
+    client.force_authenticate(user=officer)
+    data = client.get("/api/officer/queue/").json()
+
+    assert len(data) == 1
+    assert data[0]["sequence"] == 1
+    assert data[0]["is_final_step"] is False
+
+
+@pytest.mark.django_db
 def test_officer_queue_requires_auth():
     """Unauthenticated GET /api/officer/queue/ returns 403."""
     from rest_framework.test import APIClient

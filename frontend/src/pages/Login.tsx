@@ -48,7 +48,11 @@ export default function Login() {
         setError("Invalid or expired code.");
         return;
       }
-      navigate("/dashboard");
+      // Route by role: officers/admins land on the officer console, not the
+      // applicant dashboard — otherwise the only way an officer ever reaches
+      // /officer is by typing the URL by hand.
+      const { data: me } = await client.GET("/api/identity/me/");
+      navigate(me && ["officer", "admin"].includes(me.user_type) ? "/officer" : "/dashboard");
     } catch {
       setError("An unexpected error occurred.");
     } finally {
@@ -73,8 +77,9 @@ export default function Login() {
               </label>
               <input
                 id="otp"
-                type="text"
+                type="password"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value)}

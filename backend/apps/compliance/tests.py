@@ -515,6 +515,65 @@ def test_raise_system_complaint_rejects_raised_by_set():
 
 
 @pytest.mark.django_db
+def test_complaint_create_view_rejects_non_owner():
+    """POST /api/compliance/complaints/ must not let an unrelated authenticated
+    user file an applicant-origin complaint against someone else's application
+    by guessing its id."""
+    from rest_framework.test import APIClient
+
+    from apps.compliance.models import Complaint
+
+    owner = _make_user("complaint_owner")
+    stranger = _make_user("complaint_stranger")
+    stream = _make_stream("CXOWN")
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=owner,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269101",
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=stranger)
+    response = client.post(
+        "/api/compliance/complaints/",
+        {"application_id": app.pk, "subject": "Not mine", "body": "Trying anyway"},
+        format="json",
+    )
+
+    assert response.status_code == 404
+    assert Complaint.objects.filter(application=app).count() == 0
+
+
+@pytest.mark.django_db
+def test_complaint_create_view_allows_owner():
+    """The account of record can raise a complaint against their own application."""
+    from rest_framework.test import APIClient
+
+    from apps.compliance.models import Complaint
+
+    owner = _make_user("complaint_owner2")
+    stream = _make_stream("CXOWN2")
+    app = Application.objects.create(
+        stream=stream,
+        submitted_by=owner,
+        status=Application.STATUS_UNDER_SCRUTINY,
+        application_number="MBPASPA20269102",
+    )
+
+    client = APIClient()
+    client.force_authenticate(user=owner)
+    response = client.post(
+        "/api/compliance/complaints/",
+        {"application_id": app.pk, "subject": "Document wrongly rejected", "body": "Details."},
+        format="json",
+    )
+
+    assert response.status_code == 201
+    assert Complaint.objects.filter(application=app, raised_by=owner).count() == 1
+
+
+@pytest.mark.django_db
 def test_resolve_complaint_sets_status_and_notes():
     """resolve_complaint transitions status to RESOLVED and persists resolution_notes."""
     from apps.compliance.models import Complaint

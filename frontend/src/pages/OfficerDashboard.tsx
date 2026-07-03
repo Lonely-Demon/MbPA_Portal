@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { client } from "../api/client";
 import type { components } from "../api/schema";
-import { uploadFile } from "../lib/api";
+import { isTimeoutError, uploadFile } from "../lib/api";
 import { cn } from "../lib/utils";
 
 type QueueItem = components["schemas"]["OfficerQueueItem"];
@@ -48,6 +48,23 @@ function fmt(dt: string | null | undefined) {
 
 type Tab = "action" | "documents" | "fees" | "certificates";
 
+/**
+ * On an api()-layer timeout the backend transition very often completed
+ * anyway (the HTTP connection dropped, not the request) — so instead of
+ * reporting a hard failure, re-fetch the queue and check whether this item
+ * is still sitting there awaiting action. If it's gone, the action went
+ * through; only report failure once that's actually confirmed.
+ */
+async function milestoneActionWentThrough(itemId: number): Promise<boolean> {
+  try {
+    const { data } = await client.GET("/api/officer/queue/");
+    if (!data) return false;
+    return !data.some((queued) => queued.id === itemId);
+  } catch {
+    return false;
+  }
+}
+
 function MilestoneActionPanel({
   item,
   onSuccess,
@@ -59,6 +76,7 @@ function MilestoneActionPanel({
   const [note, setNote] = useState("");
   const [correctionReason, setCorrectionReason] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
@@ -84,7 +102,19 @@ function MilestoneActionPanel({
         return;
       }
       onSuccess();
-    } catch {
+    } catch (e) {
+      if (isTimeoutError(e)) {
+        setLoading(false);
+        setChecking(true);
+        const wentThrough = await milestoneActionWentThrough(item.id);
+        setChecking(false);
+        if (wentThrough) {
+          onSuccess();
+          return;
+        }
+        setError("Could not confirm — check your connection and try again.");
+        return;
+      }
       setError("An unexpected error occurred.");
     } finally {
       setLoading(false);
@@ -122,7 +152,9 @@ function MilestoneActionPanel({
           onChange={(e) => setAction(e.target.value as ActionEnum)}
           className="w-full rounded border border-paper-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal"
         >
-          <option value="approve">Approve</option>
+          <option value="approve">
+            {item.is_final_step ? "Approve — final approval" : "Approve to next stage"}
+          </option>
           <option value="return_for_correction">Return for Correction</option>
           <option value="reject">Reject</option>
         </select>
@@ -159,6 +191,12 @@ function MilestoneActionPanel({
         />
       </div>
 
+      {checking && (
+        <p className="text-sm text-amber-700 bg-amber-50 rounded px-3 py-2">
+          Taking longer than usual — checking whether it went through…
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-red-600 bg-red-50 rounded px-3 py-2">
           {error}
@@ -167,13 +205,19 @@ function MilestoneActionPanel({
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || checking}
         className={cn(
           "rounded bg-harbour text-white font-medium py-2 px-5 text-sm",
           "hover:bg-harbour-light transition-colors disabled:opacity-60",
         )}
       >
-        {loading ? "Submitting…" : "Submit"}
+        {loading
+          ? "Submitting…"
+          : action === "approve"
+            ? item.is_final_step
+              ? "Approve — final approval"
+              : "Approve to next stage"
+            : "Submit"}
       </button>
     </form>
   );

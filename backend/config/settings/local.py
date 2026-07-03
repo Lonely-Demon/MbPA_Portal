@@ -27,6 +27,16 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 SECURE_SSL_REDIRECT = False
 
+# Bug fix: the Vite dev server (npm run dev, port 5173) proxies /api/* to this
+# server on port 8000 with changeOrigin=true — but changeOrigin only rewrites
+# the Host header sent upstream, not Origin/Referer, which the browser still
+# sends as http://localhost:5173. Django 4+'s CSRF origin check compares that
+# against this server's own scheme+host and rejects the mismatch with a 403
+# on every mutating request, regardless of a valid CSRF cookie/token — so the
+# documented local dev flow (`npm run dev` + Django on :8000) never actually
+# worked against a real browser without this.
+CSRF_TRUSTED_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
 # Relax CSP for local development
 CSP_DEFAULT_SRC = ("'self'", "localhost:*")
 CSP_SCRIPT_SRC = ("'self'", "'unsafe-eval'", "localhost:*")

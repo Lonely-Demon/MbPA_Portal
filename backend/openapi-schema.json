@@ -2552,6 +2552,11 @@
                     },
                     "document_count": {
                         "type": "integer"
+                    },
+                    "is_final_step": {
+                        "type": "boolean",
+                        "description": "True only when approving this instance would be the application's\nlast milestone — i.e. there is no further stage to advance to.",
+                        "readOnly": true
                     }
                 },
                 "required": [
@@ -2559,6 +2564,7 @@
                     "document_count",
                     "due_at",
                     "id",
+                    "is_final_step",
                     "milestone_code",
                     "milestone_name",
                     "sequence",

@@ -10,6 +10,20 @@ type StatusMilestoneItem = components["schemas"]["StatusMilestoneItem"];
 type DocumentSlotRead = components["schemas"]["DocumentSlotRead"];
 type FeeAssessmentRead = components["schemas"]["FeeAssessmentRead"];
 type PaymentRead = components["schemas"]["PaymentRead"];
+type ComplaintRead = components["schemas"]["ComplaintRead"];
+
+function complaintStatusBadge(complaintStatus: string) {
+  const map: Record<string, string> = {
+    open: "bg-amber-100 text-amber-700",
+    in_review: "bg-blue-100 text-blue-700",
+    resolved: "bg-teal/10 text-teal",
+    closed: "bg-slate/10 text-slate",
+  };
+  return cn(
+    "text-xs rounded px-2 py-0.5 font-medium",
+    map[complaintStatus] ?? "bg-paper-dark text-slate",
+  );
+}
 
 function fmt(v: string | null | undefined) {
   if (!v) return "—";
@@ -85,7 +99,7 @@ interface DetailPanelProps {
 }
 
 function DetailPanel({ app }: DetailPanelProps) {
-  const [tab, setTab] = useState<"timeline" | "docs" | "fees">("timeline");
+  const [tab, setTab] = useState<"timeline" | "docs" | "fees" | "complaints">("timeline");
   const [status, setStatus] = useState<StatusLookupResponse | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [docSlots, setDocSlots] = useState<DocumentSlotRead[] | null>(null);
@@ -97,6 +111,11 @@ function DetailPanel({ app }: DetailPanelProps) {
   const [payForm, setPayForm] = useState({ challan_reference: "", claimed_amount: "", payment_date: "" });
   const [paySubmitting, setPaySubmitting] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [complaints, setComplaints] = useState<ComplaintRead[] | null>(null);
+  const [complaintsLoading, setComplaintsLoading] = useState(false);
+  const [complaintForm, setComplaintForm] = useState({ subject: "", body: "" });
+  const [complaintSubmitting, setComplaintSubmitting] = useState(false);
+  const [complaintError, setComplaintError] = useState<string | null>(null);
 
   const hasNumber = !!app.application_number;
 
@@ -196,10 +215,45 @@ function DetailPanel({ app }: DetailPanelProps) {
     }
   }
 
+  useEffect(() => {
+    if (tab === "complaints" && hasNumber && complaints === null && !complaintsLoading) {
+      setComplaintsLoading(true);
+      client
+        .GET("/api/compliance/complaints/")
+        .then(({ data }) => {
+          setComplaints((data ?? []).filter((c) => c.application === app.id));
+        })
+        .catch(() => setComplaints([]))
+        .finally(() => setComplaintsLoading(false));
+    }
+  }, [tab, hasNumber, complaints, complaintsLoading, app.id]);
+
+  async function handleComplaintSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setComplaintError(null);
+    setComplaintSubmitting(true);
+    try {
+      const { data, error } = await client.POST("/api/compliance/complaints/", {
+        body: { application_id: app.id, ...complaintForm },
+      });
+      if (error || !data) {
+        setComplaintError("Could not submit complaint. Please try again.");
+        return;
+      }
+      setComplaints((prev) => [data, ...(prev ?? [])]);
+      setComplaintForm({ subject: "", body: "" });
+    } catch {
+      setComplaintError("An unexpected error occurred.");
+    } finally {
+      setComplaintSubmitting(false);
+    }
+  }
+
   const tabs: { key: typeof tab; label: string }[] = [
     { key: "timeline", label: "Status" },
     { key: "docs", label: "Documents" },
     { key: "fees", label: "Fee & Payment" },
+    { key: "complaints", label: "Raise a Complaint" },
   ];
 
   return (
@@ -421,6 +475,102 @@ function DetailPanel({ app }: DetailPanelProps) {
                     </button>
                   </form>
                 </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Raise a Complaint tab */}
+        {tab === "complaints" && (
+          <>
+            {!hasNumber && (
+              <p className="text-sm text-slate">
+                A complaint can be raised once this application has been submitted.
+              </p>
+            )}
+            {hasNumber && (
+              <div className="space-y-5">
+                <p className="text-sm text-slate">
+                  Flag an issue with how your documents were verified at the current stage.
+                </p>
+
+                {complaintsLoading && <p className="text-sm text-slate">Loading…</p>}
+
+                {complaints && complaints.length > 0 && (
+                  <ul className="space-y-2">
+                    {complaints.map((c) => (
+                      <li
+                        key={c.id}
+                        className="rounded border border-paper-dark p-3 text-sm space-y-1"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-harbour">{c.subject}</span>
+                          <span className={complaintStatusBadge(c.status ?? "open")}>
+                            {(c.status ?? "open").replace(/_/g, " ")}
+                          </span>
+                        </div>
+                        <p className="text-slate text-xs">{c.body}</p>
+                        {c.resolution_notes && (
+                          <p className="text-xs text-teal border-t border-paper-dark pt-1 mt-1">
+                            <span className="font-medium">Resolution: </span>
+                            {c.resolution_notes}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <form onSubmit={handleComplaintSubmit} className="space-y-3 border-t pt-4">
+                  <h4 className="text-sm font-medium text-harbour">Raise a new complaint</h4>
+                  {complaintError && (
+                    <p className="text-xs text-red-600" role="alert">
+                      {complaintError}
+                    </p>
+                  )}
+                  <div>
+                    <label
+                      htmlFor={`complaint-subject-${app.id}`}
+                      className="block text-xs font-medium text-harbour mb-0.5"
+                    >
+                      Subject
+                    </label>
+                    <input
+                      id={`complaint-subject-${app.id}`}
+                      type="text"
+                      value={complaintForm.subject}
+                      onChange={(e) =>
+                        setComplaintForm((f) => ({ ...f, subject: e.target.value }))
+                      }
+                      required
+                      className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`complaint-body-${app.id}`}
+                      className="block text-xs font-medium text-harbour mb-0.5"
+                    >
+                      Describe what happened
+                    </label>
+                    <textarea
+                      id={`complaint-body-${app.id}`}
+                      value={complaintForm.body}
+                      onChange={(e) => setComplaintForm((f) => ({ ...f, body: e.target.value }))}
+                      required
+                      rows={3}
+                      placeholder="Explain what the officer missed or got wrong…"
+                      className="w-full rounded border border-paper-dark px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-teal"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={complaintSubmitting}
+                    className="rounded bg-teal text-white text-xs py-1.5 px-4 hover:bg-teal-light transition-colors disabled:opacity-60"
+                  >
+                    {complaintSubmitting ? "Submitting…" : "Submit complaint"}
+                  </button>
+                </form>
               </div>
             )}
           </>

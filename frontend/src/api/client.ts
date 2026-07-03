@@ -1,7 +1,15 @@
 import createClient from "openapi-fetch";
+import { fetchWithTimeout } from "../lib/api";
 import type { paths } from "./schema";
 
-export const client = createClient<paths>({ baseUrl: "" });
+// Every call through this client is timeout-bounded — see fetchWithTimeout's
+// docstring in lib/api.ts for why, and isTimeoutError() for how callers can
+// tell a timeout apart from a real failure and re-check server state instead
+// of reporting a hard error.
+export const client = createClient<paths>({
+  baseUrl: "",
+  fetch: (request: Request) => fetchWithTimeout(request),
+});
 
 client.use({
   async onRequest({ request }) {

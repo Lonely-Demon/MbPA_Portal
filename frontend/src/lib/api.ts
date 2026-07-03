@@ -24,6 +24,53 @@ function getCsrfCookie(): string {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+// Generous but bounded — large multi-file uploads can legitimately take a
+// while, but a request hanging forever is never an acceptable UI state.
+export const API_TIMEOUT_MS = 65000;
+
+export interface TimeoutError extends Error {
+  isTimeout: true;
+}
+
+function isAbortError(err: unknown): err is DOMException {
+  return err instanceof DOMException && err.name === "AbortError";
+}
+
+/**
+ * Wraps a `Request` with a timeout, aborting and throwing a recognizable
+ * `TimeoutError` (`isTimeout: true`) rather than hanging indefinitely.
+ * Passed to openapi-fetch's `createClient({ fetch })` in api/client.ts so
+ * every typed call gets this for free, plus used directly by api()/uploadFile()
+ * below.
+ */
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+  timeoutMs: number = API_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (err) {
+    if (isAbortError(err)) {
+      const timeoutError = new Error(
+        "Taking longer than usual to respond.",
+      ) as TimeoutError;
+      timeoutError.name = "TimeoutError";
+      timeoutError.isTimeout = true;
+      throw timeoutError;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function isTimeoutError(err: unknown): err is TimeoutError {
+  return err instanceof Error && (err as TimeoutError).isTimeout === true;
+}
+
 export async function api<T = unknown>(
   input: RequestInfo | URL,
   init: RequestInit = {},
@@ -38,7 +85,7 @@ export async function api<T = unknown>(
     headers.set("X-CSRFToken", getCsrfCookie());
   }
 
-  const response = await fetch(input, { ...init, headers, credentials: "include" });
+  const response = await fetchWithTimeout(input, { ...init, headers, credentials: "include" });
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
@@ -73,11 +120,19 @@ export async function initCsrf(): Promise<void> {
  * Returns the raw Response — callers decide how to handle non-JSON or
  * non-2xx responses for their specific upload endpoint.
  */
-export async function uploadFile(url: string, formData: FormData): Promise<Response> {
-  return fetch(url, {
-    method: "POST",
-    body: formData,
-    headers: { "X-CSRFToken": getCsrfCookie() },
-    credentials: "include",
-  });
+export async function uploadFile(
+  url: string,
+  formData: FormData,
+  timeoutMs: number = API_TIMEOUT_MS,
+): Promise<Response> {
+  return fetchWithTimeout(
+    url,
+    {
+      method: "POST",
+      body: formData,
+      headers: { "X-CSRFToken": getCsrfCookie() },
+      credentials: "include",
+    },
+    timeoutMs,
+  );
 }
