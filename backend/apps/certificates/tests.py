@@ -36,11 +36,13 @@ def _make_user(username="cert_user"):
     )
 
 
-def _make_officer(username="cert_officer"):
+def _make_officer(username="cert_officer", dsc_serial=""):
     from apps.identity.models import OfficerProfile
 
     user = User.objects.create_user(username=username, password="pw")
-    OfficerProfile.objects.create(user=user, role=OfficerProfile.ROLE_DEPUTY_PLANNER)
+    OfficerProfile.objects.create(
+        user=user, role=OfficerProfile.ROLE_DEPUTY_PLANNER, dsc_serial=dsc_serial
+    )
     return user
 
 
@@ -167,6 +169,95 @@ def test_receive_signed_certificate_ac25_valid():
     assert updated.r2_object_key == "certificates/signed.pdf"
 
 
+# ── HIGH-3: officer DSC signer allowlist ──────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_receive_signed_certificate_rejects_signer_not_in_officer_allowlist():
+    """A DSC that validates against the trust root but doesn't match the assigned
+    officer's registered dsc_serial must be rejected (signer substitution)."""
+    from apps.certificates.services import receive_signed_certificate
+    from apps.common.exceptions import DomainError
+
+    officer = _make_officer("allowlist_officer", dsc_serial="AAAAAAAA")
+
+    user = _make_user("allowlist_user")
+    app = _make_application(user)
+    cert = Certificate.objects.create(
+        application=app,
+        certificate_type=Certificate.TYPE_AIP,
+        certificate_number="MBPAAIP20260003",
+        r2_object_key="certificates/unsigned3.pdf",
+        issued_by=user,
+    )
+
+    mock_sig = MagicMock()
+    mock_sig.signer_cert.serial_number = 0xDEADBEEF  # does not match "AAAAAAAA"
+    mock_status = MagicMock(intact=True, valid=True, trusted=True)
+
+    with (
+        patch("pyhanko.pdf_utils.reader.PdfFileReader") as mock_reader_cls,
+        patch("pyhanko.sign.validation.validate_pdf_signature", return_value=mock_status),
+        patch("pyhanko_certvalidator.ValidationContext"),
+        patch("asn1crypto.x509.Certificate.load", return_value=MagicMock()),
+        patch("builtins.open", create=True) as mock_open,
+    ):
+        mock_open.return_value.__enter__ = lambda s: s
+        mock_open.return_value.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value.read = MagicMock(return_value=b"fake-der")
+        mock_reader_cls.return_value.embedded_regular_signatures = [mock_sig]
+
+        with pytest.raises(DomainError, match="does not match"):
+            receive_signed_certificate(
+                certificate=cert, signed_pdf_bytes=b"fake-pdf", expected_officer=officer
+            )
+
+    cert.refresh_from_db()
+    assert cert.signature_verified is False
+
+
+@pytest.mark.django_db
+def test_receive_signed_certificate_accepts_signer_matching_officer_allowlist():
+    """A DSC serial matching the assigned officer's registered dsc_serial passes."""
+    from apps.certificates.services import receive_signed_certificate
+
+    officer = _make_officer("allowlist_officer_ok", dsc_serial="DEADBEEF")
+
+    user = _make_user("allowlist_user_ok")
+    app = _make_application(user)
+    cert = Certificate.objects.create(
+        application=app,
+        certificate_type=Certificate.TYPE_AIP,
+        certificate_number="MBPAAIP20260004",
+        r2_object_key="certificates/unsigned4.pdf",
+        issued_by=user,
+    )
+
+    mock_sig = MagicMock()
+    mock_sig.signer_cert.serial_number = 0xDEADBEEF
+    mock_status = MagicMock(intact=True, valid=True, trusted=True)
+
+    with (
+        patch("pyhanko.pdf_utils.reader.PdfFileReader") as mock_reader_cls,
+        patch("pyhanko.sign.validation.validate_pdf_signature", return_value=mock_status),
+        patch("pyhanko_certvalidator.ValidationContext"),
+        patch("asn1crypto.x509.Certificate.load", return_value=MagicMock()),
+        patch("apps.certificates.services.store_object", return_value="certificates/signed4.pdf"),
+        patch("builtins.open", create=True) as mock_open,
+    ):
+        mock_open.return_value.__enter__ = lambda s: s
+        mock_open.return_value.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value.read = MagicMock(return_value=b"fake-der")
+        mock_reader_cls.return_value.embedded_regular_signatures = [mock_sig]
+
+        updated = receive_signed_certificate(
+            certificate=cert, signed_pdf_bytes=b"fake-pdf", expected_officer=officer
+        )
+
+    assert updated.signature_verified is True
+    assert updated.dsc_serial_used == "DEADBEEF"
+
+
 # ── test_receive_signed_certificate_ac25_tampered_rejected ───────────────────
 
 
@@ -245,7 +336,44 @@ def test_certificate_revocation_never_deletes_row_or_r2():
         mock_delete.assert_not_called()
 
 
-# ── test_oc_approval_triggers_dossier_compilation ────────────────────────────
+# ── Medium: Zip-Slip protection in compile_final_dossier ─────────────────────
+
+
+@pytest.mark.django_db
+def test_compile_final_dossier_sanitizes_path_traversal_filenames():
+    """A document uploaded with a path-traversal filename must not embed that
+    traversal in the zip archive's member names (Zip-Slip)."""
+    from apps.certificates.services import compile_final_dossier
+    from apps.documents.models import DocumentUpload
+
+    user = _make_user("dossier_user")
+    app = _make_application(user)
+
+    evil_doc = DocumentUpload.objects.create(
+        application=app,
+        uploaded_by=user,
+        r2_object_key="documents/evil.pdf",
+        original_filename="../../../etc/passwd",
+        content_type="application/pdf",
+        size_bytes=10,
+        version=1,
+    )
+
+    with (
+        patch("apps.certificates.services.default_storage") as mock_storage,
+        patch("apps.certificates.services.store_object", return_value="dossiers/fake.zip"),
+        patch("apps.certificates.services.send_email"),
+    ):
+        mock_storage.open.return_value.read.return_value = b"content"
+
+        with patch("apps.certificates.services.zipfile.ZipFile") as mock_zip_cls:
+            mock_zf = mock_zip_cls.return_value.__enter__.return_value
+            compile_final_dossier(application=app, triggered_by=user)
+
+    names = [call.args[0] for call in mock_zf.writestr.call_args_list]
+    assert len(names) == 1
+    assert names[0] == f"documents/{evil_doc.pk}-passwd"
+    assert ".." not in names[0]
 
 
 @pytest.mark.django_db

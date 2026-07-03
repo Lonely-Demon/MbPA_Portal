@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import zipfile
 from datetime import date
 
@@ -141,10 +142,18 @@ def generate_certificate(*, application, cert_type: str, issued_by) -> Certifica
     return cert
 
 
-def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: bytes) -> Certificate:
+def receive_signed_certificate(
+    *, certificate: Certificate, signed_pdf_bytes: bytes, expected_officer=None
+) -> Certificate:
     """
     AC-25: validate the DSC signature on a returned PDF against the CCA trust root.
     Sets signature_verified=True and records dsc_serial_used only on a genuine pass.
+
+    HIGH-3: if `expected_officer` is given, the signing certificate's serial must
+    match that officer's registered DSC serial. Without this, any CCA-trusted DSC
+    (e.g. a different officer's, or an unrelated citizen's) would be accepted as
+    long as it chains to the trust root — allowing signer substitution even when
+    the uploading officer is correctly assigned to the application.
     """
     from asn1crypto import x509 as asn1_x509
     from pyhanko.pdf_utils.reader import PdfFileReader
@@ -164,7 +173,11 @@ def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: by
         raise DomainError(f"DSC trust root not found at {trust_root_path}: {exc}") from exc
 
     root_cert = asn1_x509.Certificate.load(root_der)
-    vc = ValidationContext(trust_roots=[root_cert])
+    vc = ValidationContext(
+        trust_roots=[root_cert],
+        revocation_mode=settings.DSC_REVOCATION_MODE,
+        allow_fetching=settings.DSC_ALLOW_REVOCATION_FETCHING,
+    )
     sig = sigs[0]
     status = validate_pdf_signature(sig, vc)
 
@@ -175,6 +188,15 @@ def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: by
         )
 
     dsc_serial = format(sig.signer_cert.serial_number, "x").upper()
+
+    if expected_officer is not None:
+        officer_profile = getattr(expected_officer, "officer_profile", None)
+        registered_serial = (getattr(officer_profile, "dsc_serial", "") or "").strip().upper()
+        if not registered_serial or registered_serial != dsc_serial:
+            raise DomainError(
+                "DSC signer does not match the assigned officer's registered "
+                "certificate serial (AC-25)."
+            )
 
     new_key = store_object(
         prefix="certificates",
@@ -199,10 +221,29 @@ def receive_signed_certificate(*, certificate: Certificate, signed_pdf_bytes: by
     return certificate
 
 
+def _safe_zip_member_name(directory: str, discriminator, filename: str) -> str:
+    """Sanitize a filename before writing it into the dossier zip.
+
+    `original_filename` is client-supplied and never validated as a bare name
+    (AC-19 only checks content bytes). A name like "../../evil.pdf" would embed
+    a path-traversal entry in the archive that a downstream consumer could
+    later write outside the target directory on extraction (Zip-Slip). Keep
+    only the basename and prefix the row's PK so same-named uploads can't
+    collide with — and silently overwrite — each other inside the archive.
+    """
+    safe_name = os.path.basename(filename.replace("\\", "/")) or "file"
+    return f"{directory}/{discriminator}-{safe_name}"
+
+
 def compile_final_dossier(*, application, triggered_by) -> str:
     """
     Zip all active documents and issued certificates; store the bundle in R2;
     email the applicant. Triggered automatically on OC milestone approval.
+
+    No zip-bomb guard is needed on the write side: every member's content
+    comes from either an already size-capped upload (DOCUMENT_MAX_UPLOAD_SIZE_BYTES,
+    AC-19) or a locally rendered certificate PDF, so the archive's total size is
+    inherently bounded by the application's document/certificate count.
     """
     documents = application.documents.filter(is_deleted=False)
     certificates = application.certificates.filter(revoked_at__isnull=True)
@@ -215,7 +256,9 @@ def compile_final_dossier(*, application, triggered_by) -> str:
         for doc in documents:
             try:
                 content = default_storage.open(doc.r2_object_key).read()
-                zf.writestr(f"documents/{doc.original_filename}", content)
+                zf.writestr(
+                    _safe_zip_member_name("documents", doc.pk, doc.original_filename), content
+                )
                 items_added += 1
             except Exception:
                 logger.warning("Dossier: skipping missing document object %s", doc.r2_object_key)

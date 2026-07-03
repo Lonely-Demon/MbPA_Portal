@@ -95,7 +95,9 @@ class FeeEstimateView(APIView):
 
 def _get_application(kwargs):
     try:
-        return Application.objects.get(application_number=kwargs["application_number"])
+        return Application.objects.get(
+            application_number=kwargs["application_number"], deleted_at__isnull=True
+        )
     except Application.DoesNotExist:
         return None
 

@@ -114,14 +114,22 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # HIGH-5: ScopedRateThrottle alone only limits the handful of views that
+    # declare a throttle_scope (signup/login/otp/otp_resend) — every other
+    # endpoint (uploads, downloads, fee assessment, etc.) had zero rate
+    # limiting. Anon/User throttles below give every endpoint a floor.
     "DEFAULT_THROTTLE_CLASSES": [
         "rest_framework.throttling.ScopedRateThrottle",
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "signup": "5/min",
         "login": "5/min",
         "otp": "5/min",
         "otp_resend": "3/min",
+        "anon": "60/min",
+        "user": "300/min",
     },
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
     "PAGE_SIZE": 25,
@@ -199,6 +207,17 @@ DOCUMENT_MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024  # 25 MB global cap; per-slot 
 # Path to the CCA trust-root DER file used to validate officer DSC signatures.
 # In dev/test, point at a placeholder; swap for real CCA root in production.
 DSC_TRUST_ROOT_PATH = env("DSC_TRUST_ROOT_PATH", default=str(BASE_DIR / "cca_trust_root.der"))
+
+# HIGH-3: "soft-fail" (pyhanko_certvalidator's default) treats an unreachable
+# CRL/OCSP responder as "not revoked" — a network outage or a blocked responder
+# silently downgrades revocation checking to a no-op. "hard-fail" requires a
+# fresh, affirmative revocation status for every cert in the chain (except
+# trust anchors), so an unreachable revocation service fails closed instead
+# of open.
+DSC_REVOCATION_MODE = env("DSC_REVOCATION_MODE", default="hard-fail")
+# Required for hard-fail to have anything to check: without fetching enabled,
+# there is never any revocation info available and every validation would fail.
+DSC_ALLOW_REVOCATION_FETCHING = env.bool("DSC_ALLOW_REVOCATION_FETCHING", default=True)
 
 # ── Email (Resend via SMTP) ───────────────────────────────────────────────────
 EMAIL_BACKEND = env(

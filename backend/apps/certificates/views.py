@@ -112,6 +112,7 @@ class CertificateReceiveSignedView(APIView):
             updated = receive_signed_certificate(
                 certificate=cert,
                 signed_pdf_bytes=signed_pdf.read(),
+                expected_officer=request.user if user_type == "officer" else None,
             )
         except DomainError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
