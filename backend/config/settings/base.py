@@ -239,8 +239,8 @@ DEFAULT_FROM_EMAIL = env(
 AADHAAR_PEPPER = env("AADHAAR_PEPPER", default="")
 
 # ── django-csp (Content-Security-Policy; migrate to native SECURE_CSP on Django 6.x) ──
-CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'",)
+CSP_DEFAULT_SRC: tuple[str, ...] = ("'self'",)
+CSP_SCRIPT_SRC: tuple[str, ...] = ("'self'",)
 CSP_STYLE_SRC = ("'self'",)
 CSP_FONT_SRC = ("'self'", "https://fonts.gstatic.com")
 CSP_IMG_SRC = ("'self'", "data:")

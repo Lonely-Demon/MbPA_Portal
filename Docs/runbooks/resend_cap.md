@@ -81,9 +81,11 @@ The portal hit the daily or burst send rate. Options:
   cannot log in should be directed to try again later.
 - **Short term:** Upgrade the Resend plan to increase daily quota.
 - **Code-level:** If a test or batch process is hammering the OTP endpoint, identify and
-  throttle the source. The `OTPDevice` model enforces a `max_attempts` check but does not
-  rate-limit sends per email address. Consider adding send-rate throttling in
-  `apps/identity/services.py` if needed.
+  throttle the source. `OtpToken` enforces an `OTP_MAX_ATTEMPTS` cap on *verification*
+  attempts (AC-06), but sending is only rate-limited by DRF's `otp`/`otp_resend`
+  `ScopedRateThrottle` (see `DEFAULT_THROTTLE_RATES` in `config/settings/base.py`), not
+  per-email-address. Consider adding send-rate throttling in `apps/identity/services.py`
+  if a specific address is being targeted.
 
 ### Resend platform outage
 
@@ -98,18 +100,52 @@ temporarily delayed.
 
 ## Fallback: OTP delivery without email
 
-There is no SMS fallback configured. If email delivery is down and an officer or admin
-urgently needs access:
+There is no SMS fallback configured, and there is no way to read out an existing code:
+`OtpToken.code_hash` is a one-way SHA-256 hash (`apps/identity/services.py::_hash_code`)
+by design — it is never stored in a recoverable form, for the same reason passwords
+aren't. If email delivery is down and an officer or admin urgently needs access, issue a
+**new** token with a code you choose yourself, via Django shell:
 
-1. Locate the `OTPDevice` row for the user in the Django admin or via shell:
-   ```python
-   from apps.identity.models import OTPDevice
-   dev = OTPDevice.objects.filter(user__email='user@example.com').latest('created_at')
-   print(dev.token, dev.expires_at)
-   ```
-2. Provide the token out-of-band (secure channel only — phone call or in-person).
-3. Log the manual delivery in the incident record.
-4. Do not use this for applicant accounts — only internal officers.
+```python
+from datetime import timedelta
+from django.utils import timezone
+from django.contrib.auth import get_user_model
+from apps.identity.models import OtpToken
+from apps.identity.services import _hash_code
+
+User = get_user_model()
+user = User.objects.get(email="officer@example.com")
+code = "482913"  # pick any 6 digits; share only out-of-band, never in chat/email
+
+OtpToken.objects.filter(
+    email=user.email, purpose=OtpToken.PURPOSE_LOGIN, consumed_at__isnull=True
+).delete()  # supersede any pending token so it can't also be used
+token = OtpToken.objects.create(
+    user=user,
+    email=user.email,
+    purpose=OtpToken.PURPOSE_LOGIN,
+    code_hash=_hash_code(code),
+    expires_at=timezone.now() + timedelta(seconds=600),  # OTP_TTL_SECONDS default
+)
+print("token_ref:", token.token_ref)
+```
+
+The normal login UI cannot complete this flow — it only ever learns a `token_ref` from a
+*successful* `POST /api/identity/login/` response, and email delivery failing means that
+response never arrives. Give the officer both `code` and `token_ref` out-of-band, and have
+them (or you, on their behalf) call the verify endpoint directly:
+
+```bash
+curl -X POST https://<host>/api/identity/otp/verify/ \
+  -H "Content-Type: application/json" \
+  -d '{"token_ref": "<token_ref from above>", "code": "482913"}' \
+  --cookie-jar cookies.txt --cookie cookies.txt
+```
+
+1. Provide `code` and `token_ref` out-of-band (secure channel only — phone call or in-person).
+2. Log the manual issuance in the incident record.
+3. Do not use this for applicant accounts — only internal officers/admins, and only when
+   you can independently verify the requester's identity.
 
 ---
 

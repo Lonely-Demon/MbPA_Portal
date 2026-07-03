@@ -54,6 +54,12 @@ def upload_document(
 
     if document_slot_id is not None:
         document_slot = DocumentSlot.objects.filter(pk=document_slot_id).first()
+        if document_slot is None:
+            # H-3: an unresolvable slot id must not silently fall back to
+            # ad-hoc (document_slot=None) semantics — that would look up
+            # "previous version" by document_slot=None below and can
+            # incorrectly soft-delete an unrelated prior ad-hoc upload.
+            raise DomainError(f"document_slot_id={document_slot_id} does not exist.")
 
         previous = (
             DocumentUpload.objects.filter(

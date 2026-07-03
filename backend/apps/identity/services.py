@@ -7,7 +7,7 @@ import secrets
 from datetime import timedelta
 
 from django.conf import settings
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import login
 from django.db import transaction
 from django.utils import timezone
 
@@ -17,10 +17,7 @@ from apps.common.exceptions import (
     OtpAttemptsExceededError,
     OtpExpiredError,
 )
-from apps.identity.models import ApplicantProfile, OtpToken
-
-User = get_user_model()
-
+from apps.identity.models import ApplicantProfile, OtpToken, User
 
 # ── Aadhaar helpers ───────────────────────────────────────────────────────────
 
@@ -193,19 +190,33 @@ def register_applicant(
     Create a new applicant User + ApplicantProfile, then issue a signup OTP.
 
     Raises AadhaarAlreadyRegisteredError if the Aadhaar is already on file;
-    sends a fraud-alert email to the supplied address before raising.
+    sends a fraud-alert email to the existing account holder before raising.
     """
-    from apps.identity.selectors import check_aadhaar_dedup
-    from apps.notifications.services import send_email
+    from apps.identity.selectors import get_registered_owner_email
+    from apps.notifications.services import EmailDeliveryError, send_email
 
     aadhaar_hash = hash_aadhaar(aadhaar_raw)
 
-    if check_aadhaar_dedup(aadhaar_hash):
-        send_email(
-            email,
-            "aadhaar_reuse_alert",
-            {"email": email, "subject": "MbPA Portal — Duplicate registration attempt"},
-        )
+    owner_email = get_registered_owner_email(aadhaar_hash)
+    if owner_email is not None:
+        # M-7: the alert must reach the account being impersonated, not the
+        # new signup's supplied email — sending it to the new registrant just
+        # tells a would-be attacker "your own email was attempted," which is
+        # meaningless as a fraud alert. `email` (the new signup's address) is
+        # still passed into the template so the real owner can see what
+        # address the attempt used.
+        #
+        # M-6: the alert is a best-effort side notification — its delivery
+        # failing must not swallow or replace the AadhaarAlreadyRegisteredError
+        # below (already logged inside send_email on failure).
+        try:
+            send_email(
+                owner_email,
+                "aadhaar_reuse_alert",
+                {"email": email, "subject": "MbPA Portal — Duplicate registration attempt"},
+            )
+        except EmailDeliveryError:
+            pass
         raise AadhaarAlreadyRegisteredError("An account with this Aadhaar number already exists.")
 
     last4 = _normalize_aadhaar(aadhaar_raw)[-4:]

@@ -63,10 +63,7 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy
-        # continue-on-error: tracked deliberate state — not a passing gate yet.
-        # Remove once all app modules have stub coverage.
         run: mypy --config-file ../pyproject.toml .
-        continue-on-error: true
 
       - name: Apply migrations
         run: python manage.py migrate

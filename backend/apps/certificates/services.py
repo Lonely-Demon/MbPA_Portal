@@ -19,7 +19,7 @@ from apps.certificates.models import Certificate
 from apps.common.exceptions import DomainError
 from apps.compliance.services import record_audit_event
 from apps.documents.services import store_object
-from apps.notifications.services import send_email
+from apps.notifications.services import EmailDeliveryError, send_email
 
 logger = logging.getLogger("apps")
 
@@ -283,17 +283,25 @@ def compile_final_dossier(*, application, triggered_by) -> str:
         content_type="application/zip",
     )
 
-    send_email(
-        to=application.submitted_by.email,
-        template="dossier_ready",
-        context={
-            "subject": f"Your MbPA Portal Dossier is Ready — {application.application_number}",
-            "application_number": application.application_number,
-            "applicant_name": (
-                application.submitted_by.get_full_name() or application.submitted_by.username
-            ),
-        },
-    )
+    # M-6: the notification is a best-effort side effect — the dossier itself
+    # is already compiled and stored above, so a delivery failure here must
+    # not undo that or abort the record_audit_event call below.
+    try:
+        send_email(
+            to=application.submitted_by.email,
+            template="dossier_ready",
+            context={
+                "subject": (
+                    f"Your MbPA Portal Dossier is Ready — {application.application_number}"
+                ),
+                "application_number": application.application_number,
+                "applicant_name": (
+                    application.submitted_by.get_full_name() or application.submitted_by.username
+                ),
+            },
+        )
+    except EmailDeliveryError:
+        pass
 
     record_audit_event(
         verb="dossier.compiled",

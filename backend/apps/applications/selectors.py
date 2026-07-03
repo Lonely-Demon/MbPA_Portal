@@ -1,8 +1,6 @@
-from django.contrib.auth import get_user_model
+from apps.identity.models import User
 
 from .models import MilestoneInstance
-
-User = get_user_model()
 
 
 def officer_queue(officer: User):

@@ -19,7 +19,7 @@
 | Next.js | Considered, eliminated | ✅ |
 | Auth strategy | Session-cookie + CSRF (Django-native) | ✅ |
 | DB | Neon (Postgres) | ✅ |
-| File storage | Cloudflare R2 | ✅ |
+| File storage | Backblaze B2 | ✅ (revised from original Cloudflare R2 decision — see §12) |
 | System architecture | Modular monolith, synchronous request model, cron-based scheduling (not Celery), same-domain reverse proxy | ✅ |
 | Audit logging | django-simple-history + dedicated AuditEvent log for officer decisions | ✅ |
 | Testing strategy | Django/DRF built-in TestCase + APITestCase + factory_boy | ✅ |
@@ -254,14 +254,17 @@ Also relevant: Supabase is a full BaaS platform (bundled auth, storage, instant 
 
 ---
 
-## 12. Object/File Storage — AWS S3 vs. Cloudflare R2 ✅
+## 12. Object/File Storage — AWS S3 vs. Cloudflare R2 vs. Backblaze B2 ✅
+
+> **Revised post-decision:** this round originally picked Cloudflare R2 (below, kept for the record). The team switched the actual deployment to Backblaze B2 during implementation — same S3-compatible integration shape, different vendor. `config/settings/base.py` and `Docs/runbooks/b2_outage.md` reflect what's actually running.
 
 | Candidate | Free tier reality (verified current) | Verdict |
 |---|---|---|
 | AWS S3 | 5GB storage, 20K GET/2K PUT requests — **free only for the first 12 months of a new account.** $0.09/GB egress after that, on every download | ❌ Eliminated — not a real long-term-free option, and this system is download-heavy (certificates, NOC documents, repeated retrieval by applicants/officers) |
-| **Cloudflare R2** | 10GB storage, 1M write ops/month, 10M read ops/month — **permanent, resets monthly, not a 12-month countdown.** Zero egress fees, always, regardless of volume. S3-compatible API (`boto3` etc. work unchanged) | ✅ **Winner** |
+| Cloudflare R2 | 10GB storage, 1M write ops/month, 10M read ops/month — **permanent, resets monthly, not a 12-month countdown.** Zero egress fees, always, regardless of volume. S3-compatible API (`boto3` etc. work unchanged) | Originally the winner here; superseded — see note above |
+| **Backblaze B2** | 10GB storage, permanent, not time-limited. Free egress up to 3× the average monthly stored volume via the S3-compatible API ($0.01/GB beyond that). S3-compatible API (`boto3` etc. work unchanged, pointed at `backblazeb2.com`) | ✅ **Actually deployed** |
 
-**Decision: Cloudflare R2.** S3's free tier is a trial, not a feature; its egress pricing is specifically bad for a document-retrieval-heavy government portal. R2's free tier is genuinely permanent, and zero egress means every certificate/document download costs nothing instead of metering against a budget that doesn't exist yet.
+**Decision: Backblaze B2.** S3's free tier is a trial, not a feature; its egress pricing is specifically bad for a document-retrieval-heavy government portal — both R2 and B2 solve that. B2's free-egress allowance is a 3×-stored-volume cap rather than R2's unconditional zero, but comfortably covers this system's actual retrieval volume, and was the vendor actually provisioned during implementation.
 
 ---
 
@@ -403,9 +406,9 @@ Mostly a synthesis of legal groundwork already established (domain question log 
 |---|---|---|
 | SendGrid | Permanent free tier discontinued (2025) — now a 60-day trial only, then $19.95/month minimum | ❌ Eliminated |
 | AWS SES | Cheapest at scale, but starts in sandbox mode requiring manual production-access approval (24-48h), and needs hand-built bounce/complaint/monitoring infrastructure on SNS/CloudWatch — real ops burden, same reasoning that eliminated Celery+Redis | ❌ Eliminated |
-| **Resend** | 3,000 emails/month free, permanently, no credit card required, ~15-minute setup | ✅ **Winner** |
+| **Resend** | 3,000 emails/month free, permanently, no credit card required, ~15-minute setup — **but capped at 100/day**, not just the monthly figure | ✅ **Winner** |
 
-**Decision:** Resend. Comfortably covers this system's actual volume (OTPs, milestone notifications, SLA flags for one port authority) with no AWS-style approval gate or DIY infrastructure to maintain.
+**Decision:** Resend. No AWS-style approval gate or DIY infrastructure to maintain, and the 3,000/month figure comfortably covers this system's actual volume (OTPs, milestone notifications, SLA flags for one port authority) averaged out. **Revised assessment:** the *monthly* total isn't the binding constraint — the **100/day cap** is, and OTP traffic is inherently bursty (a normal business-hours applicant/officer login rush can plausibly clear 100 in a day even at this system's modest scale). `Docs/runbooks/resend_dns.md` and `Build_Plan_Research.md` §12 correctly flag this as a real go-live blocker (tracked as AC-23), not a comfortable margin — move to the Pro tier (removes the daily cap) before production traffic, and monitor daily send count so OTP delivery never silently fails against the free-tier ceiling.
 
 ---
 

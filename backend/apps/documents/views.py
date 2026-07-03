@@ -63,31 +63,45 @@ class DocumentUploadView(APIView):
 
         slot_id = ser.validated_data.get("document_slot_id")
         mi_id = ser.validated_data.get("milestone_instance_id")
+
+        # H-2: DocumentSlot only references a StreamMilestone template (shared
+        # across every application on that stream), not a specific Application —
+        # there is no way to resolve which application a slot-only upload
+        # belongs to. milestone_instance_id is required to determine both the
+        # application and (below) that the slot actually belongs to it.
+        if slot_id and not mi_id:
+            return Response(
+                {"detail": "milestone_instance_id is required when document_slot_id is set."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         milestone_instance = None
         if mi_id:
             milestone_instance = (
                 MilestoneInstance.objects.select_related("application").filter(pk=mi_id).first()
             )
-
-        application = None
-        if milestone_instance:
-            application = milestone_instance.application
-        elif slot_id:
-            slot = (
-                DocumentSlot.objects.filter(pk=slot_id)
-                .select_related("stream_milestone__stream")
-                .first()
-            )
-            if not slot:
+            if milestone_instance is None:
                 return Response(
-                    {"detail": "document_slot_id not found."},
+                    {"detail": "milestone_instance_id not found."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        if slot_id:
+            slot_matches = DocumentSlot.objects.filter(
+                pk=slot_id, stream_milestone_id=milestone_instance.stream_milestone_id
+            ).exists()
+            if not slot_matches:
+                return Response(
+                    {"detail": "document_slot_id does not belong to this milestone."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-        if application is None:
+
+        if milestone_instance is None:
             return Response(
                 {"detail": "Cannot determine application: provide milestone_instance_id."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        application = milestone_instance.application
 
         # CRIT-4: Verify the uploading user has access to this application.
         user = request.user

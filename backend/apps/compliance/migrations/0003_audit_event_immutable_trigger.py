@@ -28,7 +28,7 @@ RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION
-        'audit_event rows are immutable: % on compliance_audit_event is forbidden',
+        'audit_event rows are immutable: %% on compliance_audit_event is forbidden',
         TG_OP;
 END;
 $$;

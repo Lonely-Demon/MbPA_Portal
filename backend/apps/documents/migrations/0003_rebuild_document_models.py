@@ -148,7 +148,7 @@ class Migration(migrations.Migration):
         # CheckConstraint: size_bytes > 0
         migrations.AddConstraint(
             model_name="documentupload",
-            constraint=models.CheckConstraint(
+            constraint=models.CheckConstraint(  # type: ignore[call-arg]
                 condition=models.Q(size_bytes__gt=0), name="document_size_positive"
             ),
         ),

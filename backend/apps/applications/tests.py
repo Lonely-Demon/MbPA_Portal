@@ -449,6 +449,43 @@ def test_separation_of_duties_blocks_party_officer():
         )
 
 
+# ── MilestoneActionView authorization (CRIT) ─────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_milestone_action_rejects_anonymous_request_with_no_assigned_officer():
+    """
+    CRIT: IsAssignedOfficer must not treat an anonymous request as "the
+    assigned officer" just because both assigned_officer_id and the
+    anonymous user's pk are None. A milestone instance with no officer
+    assigned yet (a normal state — see submit_application) must reject
+    unauthenticated action requests, not let them through.
+    """
+    from rest_framework.test import APIClient
+
+    user = _make_user("crit_owner")
+    stream = _make_stream("crit_stream")
+    ms1 = _make_milestone("CRIT_S1", sla_days=5)
+    _make_stream_milestone(stream, ms1, sequence=1, role="junior_planner")
+
+    app = create_application(stream_id=stream.pk, submitted_by=user)
+    app = submit_application(application_id=app.pk, submitted_by=user)
+
+    instance = MilestoneInstance.objects.get(application=app)
+    assert instance.assigned_officer_id is None
+
+    client = APIClient()
+    response = client.post(
+        f"/api/applications/{app.application_number}/milestones/{instance.pk}/action/",
+        {"action": "approve", "decision_note": "unauthenticated attempt"},
+        format="json",
+    )
+
+    assert response.status_code in (401, 403)
+    instance.refresh_from_db()
+    assert instance.status == MilestoneInstance.STATUS_IN_PROGRESS
+
+
 # ── StrictMilestoneSequencingTests (AC-29) ───────────────────────────────────
 
 
@@ -877,6 +914,10 @@ def test_status_lookup_returns_milestones():
     ).json()
     assert "milestones" in data
     assert len(data["milestones"]) >= 1
+    # The applicant's own dashboard reuses this public endpoint to find which
+    # MilestoneInstance to attach a document upload to — id must be present.
+    mi = MilestoneInstance.objects.get(application=app)
+    assert data["milestones"][0]["id"] == mi.id
 
 
 @pytest.mark.django_db

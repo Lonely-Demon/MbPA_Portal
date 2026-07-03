@@ -80,7 +80,9 @@ class DocumentUpload(models.Model):
             ),
         ]
         constraints = [
-            models.CheckConstraint(
+            # django-stubs 5.0.x's CheckConstraint stub predates Django 5.1's
+            # rename of `check` to `condition`; the kwarg is valid at runtime.
+            models.CheckConstraint(  # type: ignore[call-arg]
                 condition=models.Q(size_bytes__gt=0), name="document_size_positive"
             ),
         ]

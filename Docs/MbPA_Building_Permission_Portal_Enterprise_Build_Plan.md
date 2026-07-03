@@ -5,7 +5,7 @@
 **Status:** v1.0 — ready to scaffold against
 **Audience:** the engineer(s) actually writing the code (you, and whoever you onboard next)
 **Upstream documents this plan implements, unchanged:** PRD v2.0, Technical Design Document v1.0, Data Requirements Document v1.0, Engineering Handoff v1.0
-**Stack constraint:** the TDD's stack is treated as fixed and non-negotiable throughout — Django 5.2 LTS + DRF, React SPA (Vite/TS/Tailwind/shadcn-ui), Neon Postgres, Cloudflare R2, Resend, session-cookie+CSRF, OS cron, pyHanko, django-simple-history, GitHub Actions.
+**Stack constraint:** the TDD's stack is treated as fixed and non-negotiable throughout — Django 5.2 LTS + DRF, React SPA (Vite/TS/Tailwind/shadcn-ui), Neon Postgres, object storage (Cloudflare R2 as specified below and throughout this plan; actually deployed as Backblaze B2 — same S3-compatible integration shape, see TDD §4.7), Resend, session-cookie+CSRF, OS cron, pyHanko, django-simple-history, GitHub Actions.
 **Target standard:** every line of code shipped should already be at the bar a CERT-In/STQC/GIGW 3.0 audit expects — so that certification is a *review*, not a *rewrite*.
 
 ---
@@ -1406,6 +1406,8 @@ class Complaint(TimestampedModel):
 ```
 
 ### 5.10 `apps/audit` — `AuditEvent`
+
+> **As actually built:** `AuditEvent` (and `record_audit_event()`, this plan's `record_event()`) ended up inside **`apps.compliance`** — alongside `ConditionalClearance`, `Complaint`, and `ErasureRequest`, which all share the same DPDP/audit-adjacent surface — rather than a standalone `apps.audit`. Every `apps/audit/...` path and `from apps.audit...` import throughout this plan (Part 6.2 in particular) should be read as `apps/compliance/...` / `from apps.compliance...`. The DB table itself is `compliance_audit_event` (see `ops/sql/restricted_role.sql`, `Docs/runbooks/neon_provisioning.md`), an explicit `Meta.db_table` override, not the `audit_auditevent` Django's default naming would produce from either app name.
 
 **Traces to:** DRD §18; TDD §10. Full model, the matching SQL migration, and the `record_event()` helper are detailed together in **Part 6.2** since this entity's correctness depends on database-level enforcement, not just the model definition.
 
@@ -4123,8 +4125,10 @@ Kept as an **opt-in, env-var-gated** integration rather than a hard dependency �
 - **`aadhaar-pepper-rotation.md`** — the procedure and constraint documented in Part 13.4, written out as actual numbered steps, including the "this requires re-verification, it is not a transform" warning in bold at the top.
 - **`dsc-token-unavailable.md`** — the V1 fallback (manual sign-print-scan-upload, TDD §8) as an actual step-by-step for an officer whose USB token isn't working, so this isn't reinvented ad hoc by whoever's on duty.
 - **`resend-cap-exceeded.md`** — what AC-23's failure mode looks like in the logs, and the escalation path (upgrade tier vs. queue-and-retry) given the system's actual volume at the time.
-- **`r2-outage.md`** — what AC-22's "object-first, metadata-second" ordering means for an in-flight upload during an R2 incident (the DB row simply never gets created; nothing to clean up), and how to verify no orphaned references exist after the fact.
+- **`r2-outage.md`** — what AC-22's "object-first, metadata-second" ordering means for an in-flight upload during an object-storage incident (the DB row simply never gets created; nothing to clean up), and how to verify no orphaned references exist after the fact.
 - **`neon-cold-start-vs-down.md`** — the AC-24 distinction, with the actual expected cold-start latency number so it's not re-derived under pressure during a real incident.
+
+**As actually written** (`Docs/runbooks/`, filenames diverged from the plan above during implementation — notably the storage runbook is named for Backblaze B2, the vendor actually deployed, not Cloudflare R2 as planned here): `b2_outage.md`, `dsc_unavailable.md`, `neon_provisioning.md`, `resend_cap.md`, `resend_dns.md`, `verify_against_neon.md`. `sla-sweep-failure.md` and `aadhaar-pepper-rotation.md` from the plan above were not written as separate runbooks.
 
 ---
 

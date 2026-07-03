@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from django.conf import settings
 from django.contrib.auth import logout
 from django.utils import timezone
@@ -35,7 +37,7 @@ class IdleTimeoutMiddleware:
         if not last_str:
             return
 
-        last = timezone.datetime.fromisoformat(last_str)
+        last = datetime.fromisoformat(last_str)
         if timezone.is_naive(last):
             last = timezone.make_aware(last)
 

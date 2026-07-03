@@ -44,7 +44,11 @@ and subject to CCA rotation). Obtain the current CCA India root bundle from
 https://cca.gov.in/root-certifying-authority.html, save as `cca_trust_root.der`, and
 restart the application.
 
-No code change needed. This is AC-34 / deployment-blocking gap documented in the plan.
+No code change needed. `apps/certificates/checks.py` (`certificates.E001`) fails
+`manage.py check` whenever `DSC_TRUST_ROOT_PATH` doesn't parse as a real DER X.509
+certificate and `DEBUG=False` — this is exactly that check firing, catching the shipped
+`cca_trust_root.der` placeholder (or a missing/corrupt real one) before it can silently
+reach production, the same way `identity.E001` does for `AADHAAR_PEPPER`.
 
 ### Signer DSC expired
 
@@ -62,15 +66,26 @@ Download the new bundle, swap the file, and restart. Verify against a known-good
 
 ## Recovery without DSC (degraded mode)
 
-There is no bypass path — `receive_signed_certificate()` always calls the verifier when
-`DSC_TRUST_ROOT_PATH` is set. If the trust root cannot be supplied immediately:
+There is no bypass path in the verification code itself — `receive_signed_certificate()`
+always calls the verifier when `DSC_TRUST_ROOT_PATH` is set. If the trust root cannot be
+supplied immediately:
 
 1. Set `DSC_TRUST_ROOT_PATH=""` in the environment to disable verification.
-2. Restart the application.
+2. Restart the application **without running `manage.py check`/`manage.py migrate`
+   first** — `certificates.E001` (see above) will now correctly refuse to pass a
+   deploy-time check with an empty/invalid trust root when `DEBUG=False`. That check
+   exists specifically so this exact "quietly leave it unset" state doesn't linger
+   unnoticed; if your deploy/restart pipeline runs `manage.py check` as a gate (this
+   project's CI does — see `.github/workflows/ci.yml`), that gate will now fail here,
+   which is intentional. A raw `gunicorn`/`runserver` process restart does not itself
+   invoke Django's check framework, so the application will still boot — but treat the
+   check failure as a loud, correct reminder that degraded mode is active, not a bug to
+   route around.
 3. Officers can then accept signed PDFs without cryptographic verification (manual
    visual inspection required instead).
-4. **Re-enable DSC_TRUST_ROOT_PATH as soon as the root bundle is available.** Log the
-   window during which verification was disabled in the incident record.
+4. **Re-enable DSC_TRUST_ROOT_PATH as soon as the root bundle is available**, and confirm
+   `manage.py check` passes again before the next normal deploy. Log the window during
+   which verification was disabled in the incident record.
 
 ---
 

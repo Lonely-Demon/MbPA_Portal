@@ -1,8 +1,18 @@
 # Verify PostgreSQL-Gated Tests Against Live Neon
 
-Four test classes in the suite are marked `pytest.skip` on SQLite and only run
+Several tests in the suite are marked `pytest.skip` on SQLite and only run
 against a real PostgreSQL connection. This runbook proves the production-shaped
 connection, not just CI's ephemeral container.
+
+> `config/settings/local.py` previously hardcoded SQLite unconditionally, silently
+> ignoring `DATABASE_URL` even when set — so CI's Postgres service container
+> (which sets `DATABASE_URL` specifically so these tests would run) was never
+> actually used, and this runbook's manual verification was the *only* way these
+> tests were ever exercised. That's now fixed: setting `DATABASE_URL` (as CI does)
+> correctly selects Postgres. This runbook remains worth running for what it's
+> actually for — confirming the real Neon connection (SSL, pooling, the
+> `restricted_role.sql` grants) behaves the same as CI's ephemeral container, not
+> as a substitute for CI having been broken.
 
 ## Prerequisites
 

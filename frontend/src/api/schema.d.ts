@@ -996,6 +996,7 @@ export interface components {
             milestones: components["schemas"]["StatusMilestoneItem"][];
         };
         StatusMilestoneItem: {
+            id: number;
             code: string;
             name: string;
             sequence: number;

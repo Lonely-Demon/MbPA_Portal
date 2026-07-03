@@ -130,6 +130,84 @@ def test_audit_event_db_trigger_blocks_raw_delete():
             )
 
 
+# ── verify_audit_protections management command (M-2) ────────────────────────
+
+
+def test_verify_audit_protections_skips_on_non_postgres():
+    from unittest.mock import patch
+
+    from django.core.management.base import CommandError
+
+    from apps.compliance.management.commands.verify_audit_protections import Command
+
+    with patch("apps.compliance.management.commands.verify_audit_protections.connection") as conn:
+        conn.vendor = "sqlite"
+        cmd = Command()
+        try:
+            cmd.handle()
+        except CommandError:
+            pytest.fail("must not raise when skipping a non-Postgres backend")
+    conn.cursor.assert_not_called()
+
+
+@pytest.mark.django_db(transaction=True)
+def test_verify_audit_protections_detects_missing_trigger():
+    if connection.vendor != "postgresql":
+        pytest.skip("trigger presence is only meaningful on PostgreSQL")
+
+    from django.core.management.base import CommandError
+
+    with connection.cursor() as cursor:
+        cursor.execute("DROP TRIGGER audit_event_no_update_delete ON compliance_audit_event")
+    try:
+        with pytest.raises(CommandError, match="Layer 2 missing"):
+            call_command("verify_audit_protections")
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                CREATE TRIGGER audit_event_no_update_delete
+                BEFORE UPDATE OR DELETE ON compliance_audit_event
+                FOR EACH ROW EXECUTE FUNCTION compliance_audit_event_immutable();
+                """
+            )
+
+
+@pytest.mark.django_db
+def test_verify_audit_protections_detects_unrestricted_role():
+    """
+    The default test/dev DB connection owns the table (or is a superuser) and
+    therefore always has UPDATE/DELETE, exactly the misconfiguration this
+    command exists to catch — restricted_role.sql was never applied.
+    """
+    if connection.vendor != "postgresql":
+        pytest.skip("role privileges are only meaningful on PostgreSQL")
+
+    from django.core.management.base import CommandError
+
+    with pytest.raises(CommandError, match="Layer 3 missing"):
+        call_command("verify_audit_protections")
+
+
+def test_verify_audit_protections_passes_when_both_layers_enforced():
+    """Unit-tests the command's own decision logic against a mocked cursor,
+    independent of whether a real restricted role exists in this environment."""
+    from unittest.mock import MagicMock, patch
+
+    from apps.compliance.management.commands.verify_audit_protections import Command
+
+    fake_cursor = MagicMock()
+    fake_cursor.__enter__.return_value = fake_cursor
+    fake_cursor.__exit__.return_value = False
+    # trigger exists, UPDATE=False, DELETE=False
+    fake_cursor.fetchone.side_effect = [(1,), (False,), (False,)]
+
+    with patch("apps.compliance.management.commands.verify_audit_protections.connection") as conn:
+        conn.vendor = "postgresql"
+        conn.cursor.return_value = fake_cursor
+        Command().handle()  # must not raise
+
+
 # ── OC / S7: never auto-cleared ───────────────────────────────────────────────
 
 
