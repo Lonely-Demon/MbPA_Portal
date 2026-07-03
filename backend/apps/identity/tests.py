@@ -314,6 +314,78 @@ def test_register_applicant_duplicate_aadhaar_raises():
 @pytest.mark.django_db
 @override_settings(
     AADHAAR_PEPPER=PEPPER_A,
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+def test_register_applicant_duplicate_aadhaar_alerts_original_owner_not_new_registrant():
+    """
+    M-7: the fraud alert must reach the account being impersonated, not the
+    new signup's supplied email. Sending it to the new registrant only tells
+    a would-be attacker "your own email was attempted" — useless as an
+    alert, and the point of a fraud alert is to warn the actual victim.
+    """
+    from django.core import mail
+
+    owner = User.objects.create_user(
+        username="original_owner", email="original_owner@test.com", password="pw"
+    )
+    h = hash_aadhaar(VALID_AADHAAR)
+    ApplicantProfile.objects.create(
+        user=owner,
+        full_name="Original Owner",
+        aadhaar_hash=h,
+        aadhaar_last4="9012",
+    )
+
+    with pytest.raises(AadhaarAlreadyRegisteredError):
+        register_applicant(
+            email="attacker@test.com",
+            username="attacker",
+            password="securepass123",
+            full_name="Attacker",
+            aadhaar_raw=VALID_AADHAAR,
+        )
+
+    assert len(mail.outbox) == 1
+    sent = mail.outbox[0]
+    assert sent.to == ["original_owner@test.com"]
+    assert "attacker@test.com" not in sent.to
+    # The alert still tells the real owner what email the attempt used.
+    assert "attacker@test.com" in sent.body
+
+
+@pytest.mark.django_db
+@override_settings(AADHAAR_PEPPER=PEPPER_A)
+def test_register_applicant_duplicate_aadhaar_raises_even_if_alert_email_fails():
+    """
+    M-6: send_email now raises on failure instead of swallowing silently.
+    The fraud-alert email is a best-effort side notification — its failure
+    must not swallow or replace AadhaarAlreadyRegisteredError.
+    """
+    from unittest.mock import patch
+
+    User.objects.create_user(username="first2", email="first2@test.com", password="pw")
+    h = hash_aadhaar(VALID_AADHAAR)
+    ApplicantProfile.objects.create(
+        user=User.objects.get(username="first2"),
+        full_name="First",
+        aadhaar_hash=h,
+        aadhaar_last4="9012",
+    )
+
+    with patch("apps.notifications.services.send_mail", side_effect=OSError("smtp down")):
+        with pytest.raises(AadhaarAlreadyRegisteredError):
+            register_applicant(
+                email="second2@test.com",
+                username="second2",
+                password="securepass123",
+                full_name="Second",
+                aadhaar_raw=VALID_AADHAAR,
+            )
+
+
+@pytest.mark.django_db
+@override_settings(
+    AADHAAR_PEPPER=PEPPER_A,
     OTP_TTL_SECONDS=600,
     OTP_MAX_ATTEMPTS=5,
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
@@ -462,6 +534,31 @@ def test_login_view_correct_credentials_issues_otp():
     assert resp.status_code == 200
     assert "token_ref" in resp.data
     assert "masked_email" in resp.data
+
+
+@pytest.mark.django_db
+@override_settings(OTP_TTL_SECONDS=600, OTP_MAX_ATTEMPTS=5)
+def test_login_view_returns_error_when_otp_email_delivery_fails():
+    """
+    M-6: request_otp() no longer swallows email delivery failures. A caller
+    must not be told login succeeded (200 + token_ref) when the OTP that
+    token_ref refers to was never actually delivered.
+    """
+    from unittest.mock import patch
+
+    User.objects.create_user(
+        username="loginfail",
+        email="loginfail@test.com",
+        password="goodpassword123",
+    )
+    client = APIClient()
+    with patch("apps.notifications.services.send_mail", side_effect=OSError("smtp down")):
+        resp = client.post(
+            "/api/identity/login/",
+            {"email": "loginfail@test.com", "username": "loginfail", "password": "goodpassword123"},
+            format="json",
+        )
+    assert resp.status_code == 409
 
 
 @pytest.mark.django_db

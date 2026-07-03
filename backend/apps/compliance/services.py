@@ -4,15 +4,13 @@ import datetime
 from datetime import timedelta
 from typing import Any
 
-from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
 from apps.common.exceptions import DomainError
+from apps.identity.models import User
 
 from .models import AuditEvent, Complaint, ConditionalClearance, ErasureRequest
-
-User = get_user_model()
 
 
 def compute_due_at(started_at: datetime.datetime, working_days: int) -> datetime.datetime:

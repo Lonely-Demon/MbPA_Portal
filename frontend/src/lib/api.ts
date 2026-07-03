@@ -1,8 +1,19 @@
 /**
- * CSRF-aware fetch wrapper.
+ * CSRF-aware fetch wrapper, plus small helpers shared across pages.
  *
  * Django's session auth requires the CSRF token on every mutating request.
  * React must read it from the csrftoken cookie (CSRF_COOKIE_HTTPONLY=False).
+ *
+ * L-1: most pages use the typed client in ../api/client.ts (generated from
+ * the backend's OpenAPI schema) instead. This module stays around for two
+ * things that client doesn't cover:
+ *   - `api()` for GET /api/applications/status/, whose ?application_number
+ *     query param isn't declared in the OpenAPI schema (the Django view
+ *     reads it manually), so openapi-fetch has no typed way to pass it.
+ *   - `uploadFile()`, a single shared multipart-upload helper — previously
+ *     each upload call site (document upload, signed-certificate upload)
+ *     duplicated its own CSRF-cookie-reading fetch() call.
+ *   - `initCsrf()`, called once on app mount (see App.tsx).
  *
  * Usage:
  *   const data = await api("/api/identity/login/", { method: "POST", body: JSON.stringify({...}) });
@@ -55,4 +66,18 @@ export class ApiError extends Error {
 /** Seed the CSRF cookie by hitting the Django csrf endpoint once on app mount. */
 export async function initCsrf(): Promise<void> {
   await api("/api/csrf/");
+}
+
+/**
+ * POST a multipart FormData body (a file upload) with the CSRF header set.
+ * Returns the raw Response — callers decide how to handle non-JSON or
+ * non-2xx responses for their specific upload endpoint.
+ */
+export async function uploadFile(url: string, formData: FormData): Promise<Response> {
+  return fetch(url, {
+    method: "POST",
+    body: formData,
+    headers: { "X-CSRFToken": getCsrfCookie() },
+    credentials: "include",
+  });
 }

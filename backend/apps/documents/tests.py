@@ -248,6 +248,64 @@ def test_ad_hoc_uploads_do_not_supersede_each_other():
     assert doc_a.is_deleted is False
 
 
+# ── H-3: an invalid document_slot_id must not mis-supersede uploads ──────────
+
+
+@pytest.mark.django_db
+def test_invalid_document_slot_id_raises_instead_of_falling_back_to_ad_hoc():
+    user = _make_user("u_h3a")
+    app = _make_application("s_h3a")
+
+    with patch("apps.documents.services.default_storage") as mock_s:
+        mock_s.save.return_value = "documents/app/x.pdf"
+        with pytest.raises(DomainError, match="document_slot_id=999999"):
+            upload_document(
+                application=app,
+                document_slot_id=999999,
+                milestone_instance=None,
+                uploaded_by=user,
+                filename="form.pdf",
+                content=_PDF_BYTES,
+            )
+
+
+@pytest.mark.django_db
+def test_invalid_document_slot_id_does_not_soft_delete_unrelated_ad_hoc_upload():
+    """
+    Regression for H-3: DocumentSlot.objects.filter(pk=bad_id).first() used to
+    return None silently, and the code then looked up "previous version" by
+    document_slot=None — matching and soft-deleting an unrelated prior ad-hoc
+    upload that had nothing to do with the bogus slot id.
+    """
+    user = _make_user("u_h3b")
+    app = _make_application("s_h3b")
+
+    with patch("apps.documents.services.default_storage") as mock_s:
+        mock_s.save.return_value = "documents/app/first.pdf"
+        ad_hoc = upload_document(
+            application=app,
+            document_slot_id=None,
+            milestone_instance=None,
+            uploaded_by=user,
+            filename="letter.pdf",
+            content=_PDF_BYTES,
+        )
+
+        mock_s.save.return_value = "documents/app/second.pdf"
+        with pytest.raises(DomainError):
+            upload_document(
+                application=app,
+                document_slot_id=999999,
+                milestone_instance=None,
+                uploaded_by=user,
+                filename="form.pdf",
+                content=_PDF_BYTES,
+            )
+
+    ad_hoc.refresh_from_db()
+    assert ad_hoc.is_deleted is False
+
+
 # ── AC-21: presigned URL is a fresh call per request ─────────────────────────
 
 
@@ -301,6 +359,100 @@ def test_r2_failure_leaves_no_orphan_row():
             )
 
     assert DocumentUpload.objects.filter(application=app).count() == 0
+
+
+# ── H-2: DocumentUploadView requires milestone_instance_id for slot uploads ──
+
+
+@pytest.mark.django_db
+def test_upload_view_rejects_slot_id_without_milestone_instance_id(client):
+    """
+    Regression for H-2: DocumentSlot only references a StreamMilestone
+    template (shared across every application on that stream), so an
+    application can never be resolved from document_slot_id alone. The view
+    used to silently fall through to a generic 400 after a pointless slot
+    lookup; it must now reject the request immediately and explicitly.
+    """
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    user = _make_user("u_h2a")
+    client.force_login(user)
+    sm = _make_stream_milestone("s_h2a", "M1")
+    slot = _make_slot(sm, "Form H2A")
+
+    resp = client.post(
+        "/api/documents/upload/",
+        {
+            "file": SimpleUploadedFile("form.pdf", _PDF_BYTES, content_type="application/pdf"),
+            "document_slot_id": slot.pk,
+        },
+    )
+    assert resp.status_code == 400
+    assert "milestone_instance_id" in resp.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_upload_view_rejects_slot_id_from_a_different_milestone(client):
+    """A document_slot_id that doesn't belong to the target milestone_instance's
+    stream_milestone must be rejected, not silently attached anyway."""
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    user = _make_user("u_h2b")
+    client.force_login(user)
+
+    sm_a = _make_stream_milestone("s_h2b_a", "M1")
+    sm_b = _make_stream_milestone("s_h2b_b", "M1")
+    wrong_slot = _make_slot(sm_b, "Form H2B")
+
+    app = _make_application("s_h2b_a", submitted_by=user)
+    mi = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm_a,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        assigned_officer=user,
+    )
+
+    resp = client.post(
+        "/api/documents/upload/",
+        {
+            "file": SimpleUploadedFile("form.pdf", _PDF_BYTES, content_type="application/pdf"),
+            "document_slot_id": wrong_slot.pk,
+            "milestone_instance_id": mi.pk,
+        },
+    )
+    assert resp.status_code == 400
+    assert "does not belong to this milestone" in resp.json()["detail"]
+
+
+@pytest.mark.django_db
+def test_upload_view_accepts_matching_slot_and_milestone_instance(client):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    user = _make_user("u_h2c")
+    client.force_login(user)
+
+    sm = _make_stream_milestone("s_h2c", "M1")
+    slot = _make_slot(sm, "Form H2C")
+    app = _make_application("s_h2c", submitted_by=user)
+    mi = MilestoneInstance.objects.create(
+        application=app,
+        stream_milestone=sm,
+        status=MilestoneInstance.STATUS_IN_PROGRESS,
+        assigned_officer=user,
+    )
+
+    with patch("apps.documents.services.default_storage") as mock_s:
+        mock_s.save.return_value = "documents/app/form.pdf"
+        mock_s.url.return_value = "https://example.com/fake-presigned-url"
+        resp = client.post(
+            "/api/documents/upload/",
+            {
+                "file": SimpleUploadedFile("form.pdf", _PDF_BYTES, content_type="application/pdf"),
+                "document_slot_id": slot.pk,
+                "milestone_instance_id": mi.pk,
+            },
+        )
+    assert resp.status_code == 201
 
 
 # ── DocumentSlotListView ──────────────────────────────────────────────────────

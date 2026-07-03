@@ -7,14 +7,26 @@ class IsAssignedOfficer(BasePermission):
     """
     AC-08 object-level permission: only the officer assigned to a
     MilestoneInstance may act on it.
+
+    CRIT: assigned_officer is a nullable FK (SET_NULL when an officer is
+    deactivated, and left unset if no active officer covers the required
+    role at submission time). Comparing assigned_officer_id == request.user.pk
+    directly would let an unauthenticated request (whose .pk is also None)
+    pass on any instance with no officer assigned yet, so both sides are
+    checked for None explicitly and authentication is required up front.
     """
 
     message = "You are not the officer assigned to this milestone."
 
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
     def has_object_permission(self, request, view, obj):
-        if isinstance(obj, MilestoneInstance):
-            return obj.assigned_officer_id == request.user.pk
-        return False
+        if not isinstance(obj, MilestoneInstance):
+            return False
+        if obj.assigned_officer_id is None:
+            return False
+        return obj.assigned_officer_id == request.user.pk
 
 
 class CanAccessApplication(BasePermission):

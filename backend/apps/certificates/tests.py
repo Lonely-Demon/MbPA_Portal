@@ -377,6 +377,42 @@ def test_compile_final_dossier_sanitizes_path_traversal_filenames():
 
 
 @pytest.mark.django_db
+def test_compile_final_dossier_succeeds_even_if_ready_email_fails():
+    """
+    M-6: send_email now raises on failure instead of swallowing silently.
+    The "dossier ready" notification is a best-effort side effect — the
+    dossier is already compiled and stored by this point, so a delivery
+    failure must not undo that or prevent the audit event from being recorded.
+    """
+    from apps.certificates.models import Certificate
+    from apps.certificates.services import compile_final_dossier
+    from apps.notifications.services import EmailDeliveryError
+
+    user = _make_user("dossier_email_fail_user")
+    app = _make_application(user)
+    Certificate.objects.create(
+        application=app,
+        certificate_type=Certificate.TYPE_AIP,
+        certificate_number="MBPAAIP20260088",
+        r2_object_key="certificates/unsigned.pdf",
+        issued_by=user,
+    )
+
+    with (
+        patch("apps.certificates.services.default_storage") as mock_storage,
+        patch("apps.certificates.services.store_object", return_value="dossiers/fake.zip"),
+        patch(
+            "apps.certificates.services.send_email",
+            side_effect=EmailDeliveryError("smtp down"),
+        ),
+    ):
+        mock_storage.open.return_value.read.return_value = b"content"
+        result = compile_final_dossier(application=app, triggered_by=user)
+
+    assert result == "dossiers/fake.zip"
+
+
+@pytest.mark.django_db
 def test_oc_approval_triggers_dossier_compilation():
     """Approving an OC milestone automatically calls compile_final_dossier."""
     from apps.applications.services import transition_milestone
@@ -525,3 +561,88 @@ def test_receive_signed_certificate_ac25_integration():
     finally:
         os.unlink(pfx_tmp.name)
         os.unlink(der_tmp.name)
+
+
+# ── DSC trust root startup enforcement (H-1) ──────────────────────────────────
+
+
+def _make_self_signed_der() -> bytes:
+    """Minimal valid self-signed DER certificate, for check-parsing tests only."""
+    import datetime
+
+    from cryptography import x509 as cx509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = cx509.Name([cx509.NameAttribute(NameOID.COMMON_NAME, "Test Root")])
+    cert = (
+        cx509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(cx509.random_serial_number())
+        .not_valid_before(datetime.datetime.now(datetime.UTC))
+        .not_valid_after(datetime.datetime.now(datetime.UTC) + datetime.timedelta(days=365))
+        .sign(key, hashes.SHA256())
+    )
+    return cert.public_bytes(serialization.Encoding.DER)
+
+
+def test_dsc_trust_root_check_errors_on_placeholder_file_in_production():
+    """H-1: manage.py check must fail when DSC_TRUST_ROOT_PATH isn't a real DER cert."""
+    import os
+    import tempfile
+
+    from django.test import override_settings
+
+    from apps.certificates.checks import dsc_trust_root_is_valid_certificate
+
+    placeholder = tempfile.NamedTemporaryFile(suffix=".der", delete=False)
+    placeholder.write(b"placeholder")
+    placeholder.close()
+    try:
+        with override_settings(DEBUG=False, DSC_TRUST_ROOT_PATH=placeholder.name):
+            errors = dsc_trust_root_is_valid_certificate(None)
+        assert [e.id for e in errors] == ["certificates.E001"]
+    finally:
+        os.unlink(placeholder.name)
+
+
+def test_dsc_trust_root_check_errors_when_file_missing_in_production():
+    from django.test import override_settings
+
+    from apps.certificates.checks import dsc_trust_root_is_valid_certificate
+
+    with override_settings(DEBUG=False, DSC_TRUST_ROOT_PATH="/nonexistent/path.der"):
+        errors = dsc_trust_root_is_valid_certificate(None)
+    assert [e.id for e in errors] == ["certificates.E001"]
+
+
+def test_dsc_trust_root_check_passes_with_real_certificate():
+    import os
+    import tempfile
+
+    from django.test import override_settings
+
+    from apps.certificates.checks import dsc_trust_root_is_valid_certificate
+
+    real_cert = tempfile.NamedTemporaryFile(suffix=".der", delete=False)
+    real_cert.write(_make_self_signed_der())
+    real_cert.close()
+    try:
+        with override_settings(DEBUG=False, DSC_TRUST_ROOT_PATH=real_cert.name):
+            assert dsc_trust_root_is_valid_certificate(None) == []
+    finally:
+        os.unlink(real_cert.name)
+
+
+def test_dsc_trust_root_check_silent_in_debug():
+    """A placeholder trust root in local dev (DEBUG=True) must not block startup."""
+    from django.test import override_settings
+
+    from apps.certificates.checks import dsc_trust_root_is_valid_certificate
+
+    with override_settings(DEBUG=True, DSC_TRUST_ROOT_PATH="/nonexistent/path.der"):
+        assert dsc_trust_root_is_valid_certificate(None) == []

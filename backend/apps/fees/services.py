@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+from typing import cast
 
 from django.db import transaction
 from django.utils import timezone
@@ -83,7 +84,7 @@ def _compute_fee_breakdown(
             }
         )
 
-    premium_total = sum((p["premium_amount"] for p in premiums), Decimal("0"))
+    premium_total = sum((cast(Decimal, p["premium_amount"]) for p in premiums), Decimal("0"))
     total = (scrutiny + security + debris + premium_total).quantize(q)
 
     return {

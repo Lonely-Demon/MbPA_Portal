@@ -23,10 +23,10 @@ are invalid. Affects document uploads and presigned URL generation.
    # From the backend container / server
    python manage.py shell -c "
    from django.conf import settings
-   print(settings.AWS_ACCESS_KEY_ID[:6], '...', settings.AWS_STORAGE_BUCKET_NAME)
+   print(settings.B2_KEY_ID[:6], '...', settings.B2_BUCKET_NAME, settings.B2_REGION)
    "
    ```
-   If `AWS_ACCESS_KEY_ID` looks wrong (wrong prefix, unexpected length) → key rotation issue.
+   If `B2_KEY_ID` looks wrong (wrong prefix, unexpected length) → key rotation issue.
 
 3. **Test connectivity directly:**
    ```bash
@@ -55,18 +55,21 @@ request will succeed automatically.
 
 ### Invalid credentials (key deleted or rotated)
 
-Credentials are stored in `backend/.env`:
+Credentials are stored in `backend/.env` (see `config/settings/base.py` — these
+feed django-storages' S3 backend via `STORAGES["default"]["OPTIONS"]`, not the
+legacy top-level `AWS_*` Django settings, which aren't set at all in this
+codebase and don't exist on `settings`):
 ```
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_STORAGE_BUCKET_NAME=mbpa-portal
-AWS_S3_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com
+B2_KEY_ID=...
+B2_APPLICATION_KEY=...
+B2_BUCKET_NAME=mbpa-portal
+B2_REGION=us-west-004
 ```
 
 **To rotate:**
 1. In the B2 console, create a new Application Key scoped **only** to the `mbpa-portal` bucket
    with Read + Write + Delete + List permissions.
-2. Update `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `backend/.env`.
+2. Update `B2_KEY_ID` and `B2_APPLICATION_KEY` in `backend/.env`.
 3. Restart the application.
 4. Delete the old key in the B2 console only **after** confirming the new key works —
    test with a small upload via the API.
@@ -78,8 +81,10 @@ AWS_S3_ENDPOINT_URL=https://s3.us-west-004.backblazeb2.com
 ### Wrong bucket name or endpoint URL
 
 If the bucket was renamed or the region endpoint changed:
-1. Verify bucket name in B2 console matches `AWS_STORAGE_BUCKET_NAME`.
-2. Verify the S3-compatible endpoint URL for your bucket's region matches `AWS_S3_ENDPOINT_URL`.
+1. Verify bucket name in B2 console matches `B2_BUCKET_NAME`.
+2. Verify `B2_REGION` matches your bucket's actual region (the endpoint URL is
+   built from it as `https://s3.{B2_REGION}.backblazeb2.com` — there's no
+   separate endpoint-URL env var to keep in sync).
 3. Update `backend/.env` and restart.
 
 ---

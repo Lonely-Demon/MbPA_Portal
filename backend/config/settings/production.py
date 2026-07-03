@@ -9,9 +9,13 @@ DEBUG = False
 ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS")
 
 # ── HTTPS / HSTS ──────────────────────────────────────────────────────────────
-# Ramp HSTS from a small value first; increase to 31536000 after confirming.
+# M-1: default is a short ramp-up value so a bad HTTPS rollout can't lock
+# clients out via a long-lived HSTS header before it's confirmed safe.
+# SECURE_HSTS_SECONDS must be raised (e.g. to 31536000) via the environment
+# once go-live is confirmed — env-configurable rather than a code edit so
+# that step doesn't require a deploy of its own to change.
 SECURE_SSL_REDIRECT = True
-SECURE_HSTS_SECONDS = 300  # raise to 31536000 after go-live
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=300)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

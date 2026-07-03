@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { client } from "../api/client";
 import { cn } from "../lib/utils";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -46,7 +48,7 @@ export default function Login() {
         setError("Invalid or expired code.");
         return;
       }
-      window.location.href = "/dashboard";
+      navigate("/dashboard");
     } catch {
       setError("An unexpected error occurred.");
     } finally {

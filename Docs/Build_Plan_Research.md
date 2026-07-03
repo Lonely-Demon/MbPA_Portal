@@ -164,6 +164,9 @@ Useful status attrs: `bottom_line`, `modification_level`, `docmdp_ok`, `coverage
 **Docs:** docs.pyhanko.eu/en/latest/lib-guide/signing.html, .../lib-guide/validation.html, .../api-docs/pyhanko.sign.signers.html, .../api-docs/pyhanko.sign.validation.html.
 
 ### 11. Cloudflare R2 + Django
+
+> **Note:** these research notes predate the switch to Backblaze B2 (see TDD §4.7, TDD Decision Log §12) — the actual deployment uses B2, not R2. The `django-storages` + `boto3` + `STORAGES` integration pattern below is identical either way (both are S3-compatible); only the endpoint/bucket/credential env vars differ. For the real, current config see `backend/config/settings/base.py` (`B2_KEY_ID`/`B2_APPLICATION_KEY`/`B2_BUCKET_NAME`/`B2_REGION`, `backblazeb2.com` endpoint).
+
 - **Use django-storages 1.14.6 + boto3** with the S3 backend pointed at R2's S3-compatible endpoint. Django 4.2+/5.x uses the **`STORAGES`** setting:
 ```python
 STORAGES = {

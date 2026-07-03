@@ -6,13 +6,21 @@ ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 INTERNAL_IPS = ["127.0.0.1"]
 
-# Use SQLite locally unless DATABASE_URL is set
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
+# Use SQLite locally unless DATABASE_URL is set.
+# Bug fix: this used to unconditionally hardcode sqlite, silently ignoring
+# DATABASE_URL — CI sets DATABASE_URL to a real Postgres service container
+# specifically so Postgres-only behavior (the audit-log trigger, gapless
+# numbering under real row locks) gets exercised, but every test gated on
+# connection.vendor == "postgresql" was skipping there too, unnoticed.
+if env("DATABASE_URL", default=""):  # noqa: F405
+    DATABASES = {"default": env.db("DATABASE_URL")}  # noqa: F405
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",  # noqa: F405
+        }
     }
-}
 
 # Disable HTTPS requirements locally
 SESSION_COOKIE_SECURE = False

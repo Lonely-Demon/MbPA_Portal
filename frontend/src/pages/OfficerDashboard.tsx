@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { client } from "../api/client";
 import type { components } from "../api/schema";
+import { uploadFile } from "../lib/api";
 import { cn } from "../lib/utils";
 
 type QueueItem = components["schemas"]["OfficerQueueItem"];
@@ -450,16 +450,9 @@ function CertificatesPanel({ item }: { item: QueueItem }) {
     try {
       const formData = new FormData();
       formData.append("signed_pdf", file);
-      const res = await fetch(
+      const res = await uploadFile(
         `/api/certificates/${item.application_number}/${certId}/receive-signed/`,
-        {
-          method: "POST",
-          body: formData,
-          headers: {
-            "X-CSRFToken":
-              document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1] ?? "",
-          },
-        },
+        formData,
       );
       if (!res.ok) {
         setUploadError("Upload failed.");
@@ -577,8 +570,6 @@ function DetailPanel({
 }
 
 export default function OfficerDashboard() {
-  const navigate = useNavigate();
-  const [authorized, setAuthorized] = useState(false);
   const [queue, setQueue] = useState<QueueItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<QueueItem | null>(null);
@@ -593,36 +584,14 @@ export default function OfficerDashboard() {
   }
 
   useEffect(() => {
-    // HIGH-10: the backend scopes the queue to the caller's own assignments,
-    // but without this check any authenticated non-officer could still land
-    // on and see the officer console shell. Redirect anyone who isn't an
-    // officer/admin before the queue is ever fetched.
-    async function checkRole() {
-      const { data, error: meError } = await client.GET("/api/identity/me/");
-      if (meError || !data || !["officer", "admin"].includes(data.user_type)) {
-        navigate("/");
-        return;
-      }
-      setAuthorized(true);
-    }
-    checkRole();
-  }, [navigate]);
-
-  useEffect(() => {
-    if (authorized) fetchQueue();
-  }, [authorized]);
+    // The officer/admin role check is enforced by RequireAuth (App.tsx)
+    // before this page renders at all — see HIGH-10 there.
+    fetchQueue();
+  }, []);
 
   function handleActionSuccess() {
     setSelected(null);
     fetchQueue();
-  }
-
-  if (!authorized) {
-    return (
-      <div className="min-h-screen bg-paper flex items-center justify-center">
-        <p className="text-slate text-sm">Loading…</p>
-      </div>
-    );
   }
 
   return (

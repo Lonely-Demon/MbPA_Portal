@@ -44,7 +44,16 @@ psql "$DATABASE_URL" \
 ```
 
 Verify the output: `compliance_audit_event` should show only `INSERT` and `SELECT`
-for `mbpa_app` — no `UPDATE` or `DELETE`.
+for `mbpa_app` — no `UPDATE` or `DELETE`. Don't rely on eyeballing this query
+output alone — after switching `DATABASE_URL` to `mbpa_app` (step 6), also run:
+
+```bash
+python manage.py verify_audit_protections
+```
+
+This re-checks both the trigger (from step 3) and the role grants (from this
+step) against the live connection and exits non-zero if either is missing —
+run it again any time after a migration or a role change, not just once here.
 
 ## 5. Seed reference data
 
@@ -81,5 +90,11 @@ Run once per officer. No credentials are committed to source code.
 
 ```bash
 python manage.py check --deploy
-curl -f https://<your-domain>/healthz/
+curl -f https://<your-domain>/api/healthz/
 ```
+
+`check --deploy` also runs `identity.E001` (`AADHAAR_PEPPER` must be set) and
+`certificates.E001` (`DSC_TRUST_ROOT_PATH` must be a real CCA certificate, not
+the placeholder `cca_trust_root.der` shipped in the repo) — both fail loudly
+here rather than at the first applicant registration / signed-certificate
+upload if misconfigured.

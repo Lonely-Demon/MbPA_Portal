@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { initCsrf } from "./lib/api";
+import ErrorBoundary from "./components/ErrorBoundary";
+import RequireAuth from "./components/RequireAuth";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ApplicantDashboard from "./pages/ApplicantDashboard";
@@ -14,15 +16,31 @@ export default function App() {
   }, []);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/status" element={<StatusLookup />} />
-        <Route path="/planner" element={<StreamPlanner />} />
-        <Route path="/dashboard/*" element={<ApplicantDashboard />} />
-        <Route path="/officer/*" element={<OfficerDashboard />} />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
+          <Route path="/status" element={<StatusLookup />} />
+          <Route path="/planner" element={<StreamPlanner />} />
+          <Route
+            path="/dashboard/*"
+            element={
+              <RequireAuth>
+                <ApplicantDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/officer/*"
+            element={
+              <RequireAuth roles={["officer", "admin"]}>
+                <OfficerDashboard />
+              </RequireAuth>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

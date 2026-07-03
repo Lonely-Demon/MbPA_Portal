@@ -1,6 +1,7 @@
-from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
+
+from apps.identity.models import User
 
 from .models import (
     Application,
@@ -9,8 +10,6 @@ from .models import (
     MilestoneInstance,
     StreamMilestone,
 )
-
-User = get_user_model()
 
 
 def generate_application_number(year: int | None = None, prefix: str = "MBPASPA") -> str:

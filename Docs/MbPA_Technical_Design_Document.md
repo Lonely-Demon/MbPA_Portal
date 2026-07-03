@@ -54,7 +54,7 @@ Applicant / Officer browser
    +- /api/*  -> Django + DRF (Gunicorn)
    |              +- Session auth + CSRF
    |              +- Neon (Postgres) - application/milestone/audit data
-   |              +- Cloudflare R2 - uploaded documents, generated certificates
+   |              +- Backblaze B2 - uploaded documents, generated certificates
    |              +- DSC signing - sync, inline (local token / Aadhaar eSign)
    |              +- Resend - email, sync, inline
    +- /*      -> React build (static)
@@ -158,20 +158,23 @@ The initial assumption was that Supabase was the only viable free Postgres optio
 
 **Deciding factor:** idle behavior, not price. Supabase requires someone to notice and manually unpause a stalled project; Neon **scales to zero and resumes automatically** on the next query (~300–800ms cold start). For a government system that needs to look reliably available even in pilot phase, the difference matters. Supabase's bundled BaaS features (auth, storage, instant APIs) would also sit unused, since Django+DRF already owns those layers — Neon is just Postgres, which is all that's actually needed.
 
-### 4.7 File/Object Storage — Cloudflare R2
+### 4.7 File/Object Storage — Backblaze B2
+
+> **Post-decision revision (as of this document's sync against the built portal):** this section originally selected Cloudflare R2, on the strength of R2's unconditional zero-egress-fee policy. The team switched the actual deployment to **Backblaze B2** during implementation; the table and rationale below reflect what is actually running (`config/settings/base.py`'s `B2_KEY_ID`/`B2_APPLICATION_KEY`/`B2_BUCKET_NAME`/`B2_REGION`, `backblazeb2.com` endpoint), not the original R2 pick. The `r2_object_key` field name on `DocumentUpload`/`Certificate` is a naming artifact of the original R2-based design — renaming it now would require a live-data migration for no functional benefit, so it stays as-is and simply stores a B2 object key.
 
 | Candidate | Free tier (verified) | Verdict |
 |---|---|---|
 | AWS S3 | 5GB, free only for the first 12 months of a new account; $0.09/GB egress after | ❌ Eliminated — not a real long-term-free option, and this system is download-heavy |
-| **Cloudflare R2** | 10GB storage, permanent (not time-limited), zero egress fees forever, S3-compatible API | ✅ **Decision** |
+| Cloudflare R2 | 10GB storage, permanent (not time-limited), zero egress fees forever, S3-compatible API | Originally selected here; superseded — see note above |
+| **Backblaze B2** | 10GB storage, permanent (not time-limited); free egress up to 3× the average monthly stored volume via the B2 Native/S3-compatible API (beyond that, $0.01/GB); S3-compatible API (`django-storages` + `boto3` work unchanged, pointed at the `backblazeb2.com` S3-compatible endpoint) | ✅ **Actually deployed** |
 
-S3's free tier is a 12-month trial dressed as a feature; R2's zero-egress policy specifically matters for a document-retrieval-heavy government portal where every certificate or NOC download would otherwise meter against a budget that doesn't exist.
+S3's free tier is a 12-month trial dressed as a feature — both R2 and B2 avoid that specific trap, which is why either was a reasonable pick. B2's free-egress allowance (3× stored volume/month) is a cap rather than R2's unconditional zero, but comfortably covers this system's actual document-retrieval volume; see `Docs/runbooks/b2_outage.md` for the operational side of this choice.
 
 ---
 
 ## 5. Deployment & Hosting
 
-The same-domain reverse-proxy topology is locked (Section 3.3). The choice between **NIC/NICSI hosting** and a **MeitY-empanelled Government Community Cloud** is explicitly **not resolved by this document** — it depends on budget and access that only MbPA controls. The architecture itself (Gunicorn behind a reverse proxy, Postgres via Neon — portable to any Postgres instance, R2 via the S3-compatible API — portable to any S3-compatible target) does not lock in either path, so this remains open without blocking development.
+The same-domain reverse-proxy topology is locked (Section 3.3). The choice between **NIC/NICSI hosting** and a **MeitY-empanelled Government Community Cloud** is explicitly **not resolved by this document** — it depends on budget and access that only MbPA controls. The architecture itself (Gunicorn behind a reverse proxy, Postgres via Neon — portable to any Postgres instance, B2 via the S3-compatible API — portable to any S3-compatible target) does not lock in either path, so this remains open without blocking development.
 
 ---
 
@@ -289,7 +292,9 @@ Carried from the existing prototype's values: 45-minute applicant sessions, 6-ho
 |---|---|---|
 | SendGrid | Permanent free tier discontinued in 2025; now a 60-day trial only, then $19.95/month minimum | ❌ Eliminated |
 | AWS SES | Cheapest at scale, but starts in sandbox mode requiring manual production-access approval (24–48 hours), and needs hand-built bounce/complaint/monitoring infrastructure on SNS/CloudWatch | ❌ Eliminated — same reasoning that eliminated Celery+Redis (Section 3.2): real ongoing ops burden for a problem this system's modest volume doesn't justify |
-| **Resend** | 3,000 emails/month free, permanently, no credit card required, roughly 15-minute setup | ✅ **Decision** |
+| **Resend** | 3,000 emails/month free, permanently, no credit card required, roughly 15-minute setup — **capped at 100/day**, the binding constraint given bursty OTP traffic, not the monthly figure | ✅ **Decision** |
+
+**The 100/day cap is a real go-live blocker, not a comfortable margin** (tracked as AC-23; see `Docs/runbooks/resend_dns.md`) — move to the Pro tier before production traffic and monitor daily send count.
 
 **Live payment gateway and GIS/mapping integration remain explicitly out of scope**, per the PRD.
 
@@ -305,7 +310,7 @@ Carried from the existing prototype's values: 45-minute applicant sessions, 6-ho
 | Accessibility | GIGW 3.0 / WCAG 2.1 AA |
 | Browser support | Last 2 versions of evergreen browsers (Chrome, Firefox, Edge, Safari) — no Internet Explorer 11 support |
 | Session timeouts | 45 minutes (applicant) / 6 hours (officer), carried from the existing prototype |
-| Email capacity | Covered by Resend's 3,000/month free tier; to be revisited if exceeded |
+| Email capacity | Resend's 3,000/month free tier is ample on average, but its 100/day cap is a real go-live blocker for bursty OTP traffic (AC-23) — upgrade to Pro before production, don't wait to be exceeded |
 
 ---
 

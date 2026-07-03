@@ -200,14 +200,14 @@ These encode the TDD §11 decision (explicit data structure, no state-machine li
 | `application` | FK → Application (`CASCADE`) | |
 | `document_slot` | FK → DocumentSlot (`PROTECT`, nullable) | Nullable for ad-hoc/extra uploads |
 | `milestone_instance` | FK → MilestoneInstance (`SET_NULL`, nullable) | Which review cycle it was uploaded for |
-| `r2_object_key` | CharField | The Cloudflare R2 storage key, NOT the file itself |
+| `r2_object_key` | CharField | The object storage key (Backblaze B2, not Cloudflare R2 as originally specified — see TDD §4.7), NOT the file itself; field name is a naming artifact of the original design |
 | `original_filename` | CharField | |
 | `content_type` / `size_bytes` | CharField / BigInt | For the validation rules (TDD: explicit size/type validators) |
 | `uploaded_by` | FK → User (`PROTECT`) | |
 | `version` | int | See check |
 | `is_deleted` / `deleted_at` | soft-delete | |
 
-**Adversarial check — "re-upload after correction."** When an officer returns an application for correction and the applicant re-uploads, does the new file *overwrite* the old one? If yes, the audit trail of "what was originally submitted" is destroyed — unacceptable for a government record where the history of what was filed matters. **Resolution:** uploads are **versioned, never overwritten**. A correction creates a new `DocumentUpload` row with incremented `version` against the same slot; the prior version is soft-deleted (hidden from the active view, retained for audit). The R2 object is likewise not overwritten — a new key. This also defends against the "file path stored but file content not preserved" gap the audit-library research explicitly warned about.
+**Adversarial check — "re-upload after correction."** When an officer returns an application for correction and the applicant re-uploads, does the new file *overwrite* the old one? If yes, the audit trail of "what was originally submitted" is destroyed — unacceptable for a government record where the history of what was filed matters. **Resolution:** uploads are **versioned, never overwritten**. A correction creates a new `DocumentUpload` row with incremented `version` against the same slot; the prior version is soft-deleted (hidden from the active view, retained for audit). The storage object is likewise not overwritten — a new key. This also defends against the "file path stored but file content not preserved" gap the audit-library research explicitly warned about.
 
 ---
 
@@ -298,7 +298,7 @@ Encodes the (undocumented-in-PRD, discovered-in-code) 7-question NOC wizard.
 | `application` | FK → Application (`PROTECT`) | |
 | `milestone_instance` | FK → MilestoneInstance (`PROTECT`) | Which milestone produced it |
 | `certificate_type` | choice: `aip`/`development_permission`/`commencement`/`completion`/`occupancy`/`iod`/`...` | |
-| `r2_object_key` | CharField | The signed PDF in R2 |
+| `r2_object_key` | CharField | The signed PDF's object storage key (Backblaze B2 — see TDD §4.7) |
 | `signature_verified` | bool | Was the DSC signature validated on receipt? (TDD §8) |
 | `signed_by` | FK → OfficerProfile (`PROTECT`) | |
 | `dsc_serial_used` | CharField | Captured from the signature for attribution |
@@ -306,7 +306,7 @@ Encodes the (undocumented-in-PRD, discovered-in-code) 7-question NOC wizard.
 | `valid_until` | DateTime, nullable | AIP=2yr, Dev Permission=5yr (PRD) — null where N/A |
 | `revoked_at` | DateTime, nullable | See check |
 
-**Adversarial check 1 — "you cannot delete a government certificate."** `on_delete=PROTECT` on both FKs, and the entity is in the NEVER-deleted set. Even if an application is withdrawn, certificates already issued are historical fact. **Resolution:** certificates are never deleted or mutated. A certificate that should no longer apply is **revoked** (`revoked_at` set) — a new state, not a deletion. The signed PDF in R2 is likewise immutable.
+**Adversarial check 1 — "you cannot delete a government certificate."** `on_delete=PROTECT` on both FKs, and the entity is in the NEVER-deleted set. Even if an application is withdrawn, certificates already issued are historical fact. **Resolution:** certificates are never deleted or mutated. A certificate that should no longer apply is **revoked** (`revoked_at` set) — a new state, not a deletion. The signed PDF in object storage is likewise immutable.
 
 **Adversarial check 2 — "the IOD coupling."** The prototype auto-issues an IOD on *every* rejection; TDD flagged whether IOD should be discretionary (open item). Modelling IOD as just another `certificate_type` keeps the schema neutral: whether one is auto-created on rejection or created by an explicit officer action is a *business-layer* decision, not baked into the data model. Either resolution of the open question works without a schema change.
 

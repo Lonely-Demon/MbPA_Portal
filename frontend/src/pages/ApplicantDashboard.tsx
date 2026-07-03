@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { client } from "../api/client";
 import type { components } from "../api/schema";
-import { api } from "../lib/api";
+import { api, uploadFile } from "../lib/api";
 import { cn } from "../lib/utils";
 
 type ApplicationRead = components["schemas"]["ApplicationRead"];
@@ -11,10 +10,6 @@ type StatusMilestoneItem = components["schemas"]["StatusMilestoneItem"];
 type DocumentSlotRead = components["schemas"]["DocumentSlotRead"];
 type FeeAssessmentRead = components["schemas"]["FeeAssessmentRead"];
 type PaymentRead = components["schemas"]["PaymentRead"];
-
-function getCsrf() {
-  return document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/)?.[1] ?? "";
-}
 
 function fmt(v: string | null | undefined) {
   if (!v) return "—";
@@ -105,9 +100,7 @@ function DetailPanel({ app }: DetailPanelProps) {
 
   const hasNumber = !!app.application_number;
 
-  const activeMilestoneId = status?.milestones?.find((m) => m.status === "in_progress") as
-    | (StatusMilestoneItem & { id?: number })
-    | undefined;
+  const activeMilestone = status?.milestones?.find((m) => m.status === "in_progress");
 
   useEffect(() => {
     if (tab === "timeline" && hasNumber && !status) {
@@ -150,10 +143,8 @@ function DetailPanel({ app }: DetailPanelProps) {
 
   useEffect(() => {
     if (tab === "docs" && status) {
-      const active = status.milestones?.find((m) => m.status === "in_progress") as
-        | (StatusMilestoneItem & { id?: number })
-        | undefined;
-      if (active?.id && docSlots === null) {
+      const active = status.milestones?.find((m) => m.status === "in_progress");
+      if (active && docSlots === null) {
         loadDocSlots(active.id);
       }
     }
@@ -167,12 +158,7 @@ function DetailPanel({ app }: DetailPanelProps) {
       fd.append("file", file);
       fd.append("document_slot_id", String(slotId));
       fd.append("milestone_instance_id", String(milestoneInstanceId));
-      const res = await fetch("/api/documents/upload/", {
-        method: "POST",
-        headers: { "X-CSRFToken": getCsrf() },
-        credentials: "include",
-        body: fd,
-      });
+      const res = await uploadFile("/api/documents/upload/", fd);
       if (res.ok) {
         setUploadMsg("File uploaded successfully.");
       } else {
@@ -263,10 +249,10 @@ function DetailPanel({ app }: DetailPanelProps) {
                 Loading status to find active milestone…
               </p>
             )}
-            {hasNumber && status && !activeMilestoneId && (
+            {hasNumber && status && !activeMilestone && (
               <p className="text-sm text-slate">No active milestone to upload documents for.</p>
             )}
-            {hasNumber && status && activeMilestoneId?.id && (
+            {hasNumber && status && activeMilestone && (
               <>
                 {uploadMsg && (
                   <p className="text-sm text-teal mb-3">{uploadMsg}</p>
@@ -294,8 +280,8 @@ function DetailPanel({ app }: DetailPanelProps) {
                           disabled={uploadingSlot === slot.id}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
-                            if (file && activeMilestoneId.id) {
-                              handleUpload(slot.id, file, activeMilestoneId.id);
+                            if (file) {
+                              handleUpload(slot.id, file, activeMilestone.id);
                             }
                           }}
                           className="block text-xs text-slate"
@@ -445,24 +431,20 @@ function DetailPanel({ app }: DetailPanelProps) {
 }
 
 export default function ApplicantDashboard() {
-  const navigate = useNavigate();
   const [apps, setApps] = useState<ApplicationRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
+    // Auth is already enforced by RequireAuth (App.tsx) before this page
+    // renders at all.
     async function load() {
-      const { error: meError } = await client.GET("/api/identity/me/");
-      if (meError) {
-        navigate("/");
-        return;
-      }
       const { data } = await client.GET("/api/applications/");
       if (data) setApps(data);
       setLoading(false);
     }
     load();
-  }, [navigate]);
+  }, []);
 
   function toggle(id: number) {
     setExpandedId((prev) => (prev === id ? null : id));

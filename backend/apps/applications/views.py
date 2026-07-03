@@ -97,6 +97,7 @@ class StatusLookupView(APIView):
                     "milestones": inline_serializer(
                         "StatusMilestoneItem",
                         {
+                            "id": drf_serializers.IntegerField(),
                             "code": drf_serializers.CharField(),
                             "name": drf_serializers.CharField(),
                             "sequence": drf_serializers.IntegerField(),
@@ -144,6 +145,13 @@ class StatusLookupView(APIView):
                 "submitted_at": app.submitted_at,
                 "milestones": [
                     {
+                        # A MilestoneInstance id grants no capability by itself
+                        # (DocumentUploadView/etc. still enforce ownership on
+                        # the application, not secrecy of this id) — exposing
+                        # it here is what lets the applicant's own dashboard
+                        # reuse this same public endpoint to know which
+                        # instance to attach an upload to.
+                        "id": mi.id,
                         "code": mi.stream_milestone.milestone.code,
                         "name": mi.stream_milestone.milestone.name,
                         "sequence": mi.stream_milestone.sequence,
@@ -279,7 +287,7 @@ class MilestoneActionView(APIView):
         return Response(MilestoneInstanceSerializer(updated).data)
 
     def get_permissions(self):
-        return [IsAssignedOfficer()]
+        return [IsAuthenticated(), IsAssignedOfficer()]
 
 
 class OfficerQueueView(APIView):
