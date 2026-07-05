@@ -229,6 +229,7 @@ EMAIL_PORT = 587
 EMAIL_HOST_USER = "resend"
 EMAIL_HOST_PASSWORD = env("RESEND_API_KEY", default="")
 EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = env.int("EMAIL_TIMEOUT", default=5)
 DEFAULT_FROM_EMAIL = env(
     "DEFAULT_FROM_EMAIL",
     default="Mumbai Port Authority <noreply@mbpa.example.gov>",
