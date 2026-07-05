@@ -179,7 +179,7 @@ export default function Signup() {
   const selectedStream = streams.find((s) => String(s.id) === data.stream_id) ?? null;
 
   return (
-    <div className="min-h-screen bg-paper py-8 px-4">
+    <main className="min-h-screen bg-paper py-8 px-4">
       <div className="max-w-lg mx-auto">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-harbour">Create Account</h1>
@@ -350,7 +350,7 @@ export default function Signup() {
                 <button
                   type="button"
                   onClick={handleResend}
-                  className="text-sm text-teal hover:underline"
+                  className="text-sm text-teal-link underline"
                 >
                   Resend OTP
                 </button>
@@ -541,11 +541,11 @@ export default function Signup() {
 
         <p className="mt-4 text-center text-sm text-slate">
           Already have an account?{" "}
-          <a href="/" className="text-teal hover:underline">
+          <a href="/" className="text-teal-link underline">
             Sign in
           </a>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

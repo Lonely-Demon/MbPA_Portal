@@ -51,6 +51,7 @@ function MilestoneStrip({ milestones }: { milestones: StatusMilestoneItem[] }) {
       {milestones.map((m) => (
         <li key={m.code} className="flex items-start gap-3 text-sm">
           <span
+            role="img"
             aria-label={
               m.status === "completed"
                 ? "Completed"
@@ -388,7 +389,7 @@ function DetailPanel({ app }: DetailPanelProps) {
 
                 {payments.length > 0 && (
                   <div>
-                    <h4 className="text-sm font-medium text-harbour mb-2">Payments</h4>
+                    <h2 className="text-sm font-medium text-harbour mb-2">Payments</h2>
                     <ul className="space-y-1 text-xs">
                       {payments.map((p) => (
                         <li key={p.id} className="flex justify-between">
@@ -411,7 +412,7 @@ function DetailPanel({ app }: DetailPanelProps) {
                 )}
 
                 <div>
-                  <h4 className="text-sm font-medium text-harbour mb-2">Record a Payment</h4>
+                  <h2 className="text-sm font-medium text-harbour mb-2">Record a Payment</h2>
                   {payError && (
                     <p className="text-xs text-red-600 mb-2">{payError}</p>
                   )}
@@ -522,7 +523,7 @@ function DetailPanel({ app }: DetailPanelProps) {
                 )}
 
                 <form onSubmit={handleComplaintSubmit} className="space-y-3 border-t pt-4">
-                  <h4 className="text-sm font-medium text-harbour">Raise a new complaint</h4>
+                  <h2 className="text-sm font-medium text-harbour">Raise a new complaint</h2>
                   {complaintError && (
                     <p className="text-xs text-red-600" role="alert">
                       {complaintError}
@@ -620,7 +621,7 @@ export default function ApplicantDashboard() {
         </a>
       </header>
 
-      <div className="max-w-3xl mx-auto p-6 space-y-4">
+      <main className="max-w-3xl mx-auto p-6 space-y-4">
         {apps.length === 0 && (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
             <p className="text-slate text-sm mb-3">You have no applications yet.</p>
@@ -663,7 +664,7 @@ export default function ApplicantDashboard() {
             {expandedId === app.id && <DetailPanel app={app} />}
           </div>
         ))}
-      </div>
+      </main>
     </div>
   );
 }

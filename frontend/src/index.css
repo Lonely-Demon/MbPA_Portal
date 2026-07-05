@@ -8,6 +8,10 @@
   --color-brass-light: #e0b44a;
   --color-teal: #0e7c86;
   --color-teal-light: #13a3b0;
+  /* A11y: #0e7c86 on the paper background is 4.46:1 — just under WCAG AA's
+     4.5:1 for normal text. Used only for text-on-paper links/actions where
+     that fails; --color-teal itself (buttons, badges, icons) is unaffected. */
+  --color-teal-link: #0d757f;
   --color-paper: #f6f3ec;
   --color-paper-dark: #ede9e0;
   --color-slate: #4a5568;

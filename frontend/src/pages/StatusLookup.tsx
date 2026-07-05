@@ -48,7 +48,7 @@ export default function StatusLookup() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper">
+    <main className="min-h-screen flex items-center justify-center bg-paper">
       <div className="w-full max-w-lg bg-white rounded-lg shadow-lg p-8">
         <h1 className="text-xl font-bold text-harbour mb-1">Application Status</h1>
         <p className="text-slate text-sm mb-6">Track your building permission application.</p>
@@ -160,6 +160,6 @@ export default function StatusLookup() {
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

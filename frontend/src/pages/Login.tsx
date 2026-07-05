@@ -62,7 +62,7 @@ export default function Login() {
 
   if (tokenRef !== null) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-paper">
+      <main className="min-h-screen flex items-center justify-center bg-paper">
         <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-harbour">Verify OTP</h1>
@@ -107,12 +107,12 @@ export default function Login() {
             </button>
           </form>
         </div>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-paper">
+    <main className="min-h-screen flex items-center justify-center bg-paper">
       <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-harbour">MbPA Portal</h1>
@@ -190,12 +190,12 @@ export default function Login() {
 
         <p className="mt-6 text-center text-sm text-slate">
           New applicant?{" "}
-          <a href="/signup" className="text-teal hover:underline">
+          <a href="/signup" className="text-teal-link underline">
             Register
           </a>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
 

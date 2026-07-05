@@ -74,11 +74,15 @@ export default function StreamPlanner() {
         </p>
       </header>
 
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
+      <main className="max-w-2xl mx-auto p-6 space-y-6">
         {/* Stream selector */}
         <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
           <h2 className="font-semibold text-harbour">1. Select Stream</h2>
+          <label htmlFor="stream-select" className="sr-only">
+            Stream
+          </label>
           <select
+            id="stream-select"
             value={selectedCode}
             onChange={(e) => setSelectedCode(e.target.value)}
             className={inputCls}
@@ -261,11 +265,11 @@ export default function StreamPlanner() {
 
         <div className="text-center text-sm text-slate">
           Ready to apply?{" "}
-          <a href="/signup" className="text-teal hover:underline">
+          <a href="/signup" className="text-teal-link underline">
             Register and submit an application
           </a>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

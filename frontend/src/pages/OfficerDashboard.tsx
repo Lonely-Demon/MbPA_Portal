@@ -392,7 +392,7 @@ function FeesPanel({ item }: { item: QueueItem }) {
                     {p.status === "claimed" && (
                       <button
                         onClick={() => setVerifyId(p.id)}
-                        className="text-teal hover:underline text-xs"
+                        className="text-teal-link underline text-xs"
                       >
                         Verify
                       </button>
@@ -532,7 +532,7 @@ function CertificatesPanel({ item }: { item: QueueItem }) {
           <div className="flex gap-2 pt-1">
             <button
               onClick={() => download(cert.id)}
-              className="text-teal hover:underline text-xs"
+              className="text-teal-link underline text-xs"
             >
               Download
             </button>
@@ -644,7 +644,7 @@ export default function OfficerDashboard() {
         <h1 className="text-lg font-bold">MbPA Officer Console</h1>
       </header>
 
-      <div className="flex h-[calc(100vh-52px)]">
+      <main className="flex h-[calc(100vh-52px)]">
         {/* Left panel — Review Queue */}
         <div className="w-full lg:w-96 border-r border-paper-dark bg-white overflow-y-auto flex-shrink-0">
           <div className="px-4 py-3 border-b border-paper-dark">
@@ -723,7 +723,7 @@ export default function OfficerDashboard() {
             </div>
           )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
