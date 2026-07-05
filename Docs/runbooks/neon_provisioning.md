@@ -2,12 +2,25 @@
 
 Execute these steps once per environment (staging / production).
 
+> **Confirmed working end-to-end** against a real Neon project (`ap-southeast-1`,
+> Postgres 18): migrate → `restricted_role.sql` → `verify_audit_protections` →
+> `seed_reference_data` → `createsuperuser`/`create_officer` → switch
+> `DATABASE_URL` to `mbpa_app` → live `pytest` run all completed as written
+> below, no deviations needed.
+
 ## 1. Create a Neon project
 
 1. Log into [console.neon.tech](https://console.neon.tech).
 2. Click **New project** → name it `mbpa-portal-prod` (or `-staging`).
 3. Choose a region close to your deployment (e.g. `aws-ap-south-1` for Mumbai).
-4. Note the connection string: `postgres://neondb_owner:<password>@<host>/neondb`.
+4. Note **both** connection strings Neon gives you: the direct host
+   (`ep-xxxx.<region>.aws.neon.tech`) and the pooler host
+   (`ep-xxxx-pooler.<region>.aws.neon.tech`). Use the direct host for
+   migrations/admin work (steps 3-5 below — schema changes and one-off admin
+   commands are safest against a direct session) and the pooler host for the
+   application's actual runtime `DATABASE_URL` (step 6) — it's what lets
+   Neon's connection pooling handle concurrent gunicorn workers without
+   exhausting Postgres's own connection limit.
 
 ## 2. Create two roles
 
@@ -70,10 +83,11 @@ confirmed UPDR-2026 figures before going live (see Part 18 of the build plan).
 
 ## 6. Wire environment variables
 
-Switch the application's `DATABASE_URL` to `mbpa_app`:
+Switch the application's `DATABASE_URL` to `mbpa_app`, using the **pooler**
+host (see step 1's note — not the direct host used for migrations above):
 
 ```
-DATABASE_URL=postgres://mbpa_app:<password>@<host>/neondb
+DATABASE_URL=postgres://mbpa_app:<password>@<pooler-host>/neondb?sslmode=require
 ```
 
 All other env vars remain unchanged. The application never needs `neondb_owner`.
