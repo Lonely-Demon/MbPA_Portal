@@ -4,7 +4,7 @@
 # `pip-audit -r requirements.txt` when you do.
 
 # ── Core ──────────────────────────────────────────────────────────────────────
-Django==5.2.15
+Django==5.2.16
 djangorestframework==3.16.0
 django-environ==0.11.2
 
