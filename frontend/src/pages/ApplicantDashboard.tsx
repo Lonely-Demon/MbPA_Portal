@@ -151,7 +151,7 @@ function DetailPanel({ app }: DetailPanelProps) {
         .catch(() => {})
         .finally(() => setFeesLoading(false));
     }
-  }, [tab, hasNumber, assessment, feesLoading, app.application_number]);
+  }, [tab, hasNumber, assessment, app.application_number]);
 
   async function loadDocSlots(milestoneInstanceId: number) {
     const { data } = await client.GET("/api/documents/slots/{milestone_instance_id}/", {
@@ -226,7 +226,7 @@ function DetailPanel({ app }: DetailPanelProps) {
         .catch(() => setComplaints([]))
         .finally(() => setComplaintsLoading(false));
     }
-  }, [tab, hasNumber, complaints, complaintsLoading, app.id]);
+  }, [tab, hasNumber, complaints, app.id]);
 
   async function handleComplaintSubmit(e: React.FormEvent) {
     e.preventDefault();
